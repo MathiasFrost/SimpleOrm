@@ -16,7 +16,7 @@ public class SimpleOrmTest
 	[Fact]
 	public async Task Should_FetchFirstOrDefault()
 	{
-		Root? res = await _db.FirstOrDefault<Root>(
+		Root? res = await _db.FirstAsync<Root>(
 						@"
 select *
 from root r
@@ -30,7 +30,7 @@ from root r
 	[Fact]
 	public async Task Should_FetchAll()
 	{
-		IList<Root> res = await _db.QueryAsync<Root>(
+		IList<Root> res = await _db.ToListAsync<Root>(
 						@"
 select *
 from root r
