@@ -11,19 +11,19 @@ public class SimpleOrmTest
 	private readonly SimpleOrmClient<MySqlConnection> _db;
 
 	public SimpleOrmTest() =>
-			_db = new SimpleOrmClient<MySqlConnection>(
-					"server=localhost;userid=zoru;password=1012;database=beingrating");
+			_db = new SimpleOrmClient<MySqlConnection>("server=localhost;userid=zoru;password=1012;database=test");
 
 	[Fact]
-	public async Task Should_FetchArray()
+	public async Task Should_FetchFirstOrDefault()
 	{
-		List<Root> res = await _db.QueryAsync<Root>(
+		Root? res = await _db.FirstOrDefault<Root>(
 						@"
-select b.Id, b.Name, b.Gender, b.Tags, u.Name, u.Description
-from beings b
-         left join universes u on u.Id = b.UniverseId;
+select r.*
+from root r
+         join child c on r.Id = c.RootId
+         join sibling s on s.Id = r.SiblingId
 		")
 				.ConfigureAwait(false);
-		Assert.NotEmpty(res);
+		Assert.NotNull(res);
 	}
 }

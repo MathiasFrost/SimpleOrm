@@ -1,14 +1,18 @@
 ﻿using System.Data;
 using System.Data.Common;
-using System.Reflection;
+using JetBrains.Annotations;
 
 namespace SimpleOrm;
 
+[PublicAPI]
 public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, new()
 {
 	private readonly string _connectionString;
 
 	public SimpleOrmClient(string connectionString) => _connectionString = connectionString;
+
+	public List<T> Query<T>(string sql) where T : new() =>
+			QueryAsync<T>(sql).ConfigureAwait(false).GetAwaiter().GetResult();
 
 	public async Task<List<T>> QueryAsync<T>(string sql, CancellationToken token = default) where T : new()
 	{
@@ -16,15 +20,14 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		connection.ConnectionString = _connectionString;
 		DbCommand command = connection.CreateCommand();
 		command.CommandText = sql;
-
-		var res = new List<T>();
 		if (command.Connection == null)
 		{
-			return res;
+			return new List<T>();
 		}
 		await command.Connection.OpenAsync(token).ConfigureAwait(false);
 
-		PropertyInfo[] check = { };
+		var rows = new List<object[]>();
+		PropertyHierarchy[] properties = Array.Empty<PropertyHierarchy>();
 		var first = true;
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -33,56 +36,45 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 			reader.GetValues(row);
 			if (first)
 			{
-				check = FirstTimeCheck<T>(row, reader);
+				properties = reader.FirstTimeCheck<T>(row);
 			}
-			var el = InstantiateFromRow<T>(row, check, reader.FieldCount);
-			res.Add(el);
+			rows.Add(row);
+			first = false;
+		}
+
+		await reader.CloseAsync().ConfigureAwait(false);
+		return new List<T>();
+	}
+
+	public async Task<T?> FirstOrDefault<T>(string sql, CancellationToken token = default) where T : new()
+	{
+		await using var connection = new TDbConnection();
+		connection.ConnectionString = _connectionString;
+		DbCommand command = connection.CreateCommand();
+		command.CommandText = sql;
+		if (command.Connection == null)
+		{
+			return default(T?);
+		}
+		await command.Connection.OpenAsync(token).ConfigureAwait(false);
+
+		var res = new T();
+		var first = true;
+		PropertyHierarchy[] properties = Array.Empty<PropertyHierarchy>();
+		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+		while (await reader.ReadAsync(token).ConfigureAwait(false))
+		{
+			var row = new object[reader.FieldCount];
+			reader.GetValues(row);
+			if (first)
+			{
+				properties = reader.FirstTimeCheck<T>(row);
+			}
+			res.Parse<T>(row, properties);
 			first = false;
 		}
 
 		await reader.CloseAsync().ConfigureAwait(false);
 		return res;
-	}
-
-	private static PropertyInfo[] FirstTimeCheck<T>(IReadOnlyList<object> columns, IDataRecord reader) where T : new()
-	{
-		PropertyInfo[] properties = typeof(T).GetProperties();
-		var res = new PropertyInfo[reader.FieldCount];
-		for (var i = 0; i < reader.FieldCount; i++)
-		{
-			string name = reader.GetName(i);
-			Type actual = columns[i].GetType();
-			PropertyInfo? truth = properties.FirstOrDefault(
-					info => String.Equals(name, info.Name, StringComparison.OrdinalIgnoreCase));
-
-			if (truth == null)
-			{
-				throw new Exception($"{name} was not found as a property in type {typeof(T).Name}");
-			}
-			if (!actual.IsAssignableFrom(truth.PropertyType))
-			{
-				throw new Exception($"{actual.Name} is not assignable from {truth.PropertyType.Name}");
-			}
-			res[i] = truth;
-		}
-		return res;
-	}
-
-	private static string GetTest()
-	{
-		return "";
-	}
-
-	private static T InstantiateFromRow<T>(
-			IReadOnlyList<object> values,
-			IReadOnlyList<PropertyInfo> properties,
-			int fieldCount) where T : new()
-	{
-		var el = new T();
-		for (var i = 0; i < fieldCount; i++)
-		{
-			properties[i].SetValue(el, values[i]);
-		}
-		return el;
 	}
 }

@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 using JetBrains.Annotations;
 
 namespace SimpleOrm.Test.Models;
@@ -8,6 +9,28 @@ public class Root
 {
 	public ulong Id { get; init; }
 
-	[Column("Name")]
-	public string Namae { get; init; } = null!;
+	[Column("Name")] public string Namae { get; init; } = null!;
+
+	public ulong SiblingId { get; init; }
+
+	public Sibling? Sibling { get; init; }
+
+	public List<Child> Children { get; init; } = new();
+}
+
+[PublicAPI]
+public class Sibling
+{
+	public ulong Id { get; init; }
+
+	[Column("Name")] public string Namae { get; init; } = null!;
+}
+
+[PublicAPI]
+public class Child
+{
+	public ulong Id { get; init; }
+	public ulong RootId { get; init; }
+
+	[Column("Name")] public string Namae { get; init; } = null!;
 }
