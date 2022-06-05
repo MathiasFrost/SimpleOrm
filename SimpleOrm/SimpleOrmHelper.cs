@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Reflection;
@@ -7,12 +8,11 @@ namespace SimpleOrm;
 
 public static class SimpleOrmHelper
 {
-	public static PropertyHierarchy[] FirstTimeCheck<T>(this IDataRecord reader, IReadOnlyList<object> columns)
+	public static IList<PropertyHierarchy> BuildHierarchy<T>(this IDataRecord reader, IReadOnlyList<object> columns)
 			where T : new()
 	{
 		Type parentType = typeof(T);
 		List<PropertyHierarchy> properties = parentType.GetProperties().BuildPropertyHierarchy(parentType, true);
-		var res = new PropertyHierarchy[reader.FieldCount];
 		for (var i = 0; i < reader.FieldCount; i++)
 		{
 			string name = reader.GetName(i);
@@ -30,7 +30,28 @@ public static class SimpleOrmHelper
 
 			truth.IsMapped = true;
 			truth.Index = i;
-			res[i] = truth;
+		}
+		IList<string> errors = properties.CheckHierarchy();
+		if (errors.Any())
+		{
+			throw new Exception(String.Join('\n', errors));
+		}
+		return properties;
+	}
+
+	private static IList<string> CheckHierarchy(this IEnumerable<PropertyHierarchy> properties)
+	{
+		var res = new List<string>();
+		foreach (PropertyHierarchy property in properties)
+		{
+			if (property.Children.Any())
+			{
+				res.AddRange(property.Children.CheckHierarchy());
+			}
+			else if (!property.IsMapped)
+			{
+				res.Add($"Type {property.Parent.Name} has public property {property.PropertyInfo.Name} that was not found among the query results");
+			}
 		}
 		return res;
 	}
@@ -39,7 +60,7 @@ public static class SimpleOrmHelper
 	{
 		PropertyHierarchy? found = properties.FirstOrDefault(
 				info => !info.IsMapped
-				        && String.Equals(name, info.GetColumnName(), StringComparison.OrdinalIgnoreCase));
+				        && String.Equals(name, info.GetColumnName(), StringComparison.Ordinal));
 
 		if (found != null)
 		{
@@ -110,7 +131,7 @@ public static class SimpleOrmHelper
 		return property.PropertyInfo.Name;
 	}
 
-	public static void Parse<T>(this T element, object[] row, PropertyHierarchy[] properties) where T : new()
+	public static void Parse(this object element, object[] row, IList<PropertyHierarchy> properties)
 	{
 		if (element == null)
 		{
@@ -122,10 +143,34 @@ public static class SimpleOrmHelper
 			switch (prop.KnownTypes)
 			{
 				case KnownTypes.Value:
+					if (prop.ValueSet)
+					{
+						Console.WriteLine("Value type was about to be overriden; First result detected");
+						return;
+					}
+
+					Console.WriteLine("Value");
 					prop.PropertyInfo.SetValue(element, row[prop.Index]);
+					prop.ValueSet = true;
 					break;
 				case KnownTypes.Class:
+					if (prop.ValueSet)
+					{
+						Console.WriteLine("Class type was about to be overriden; First result detected");
+						return;
+					}
+
 					Console.WriteLine("Class");
+					ConstructorInfo? constructor = prop.PropertyInfo.PropertyType.GetConstructor(Array.Empty<Type>());
+					if (constructor == null)
+					{
+						throw new Exception(
+								$"Property {prop.PropertyInfo.Name} did not have a parameterless constructor");
+					}
+					object @class = constructor.Invoke(Array.Empty<object>());
+					prop.PropertyInfo.SetValue(element, @class);
+					prop.ValueSet = true;
+					@class.Parse(row, prop.Children);
 					break;
 				case KnownTypes.Array:
 					Console.WriteLine("Array");
@@ -135,7 +180,7 @@ public static class SimpleOrmHelper
 		}
 	}
 
-	private static T? GetByBaseProps<T>(
+	private static T? GetByKeys<T>(
 			this IEnumerable<T> items,
 			IReadOnlyList<PropertyHierarchy> baseProps,
 			IReadOnlyList<object> columns) where T : new()
@@ -173,6 +218,8 @@ public class PropertyHierarchy
 		Parent = parent;
 		IsBase = isBase;
 		KnownTypes = knownTypes;
+		IsKey = propertyInfo.GetCustomAttributesData()
+				.Any(data => data.AttributeType.IsAssignableFrom(typeof(KeyAttribute)));
 	}
 
 	public readonly KnownTypes KnownTypes;
@@ -181,9 +228,13 @@ public class PropertyHierarchy
 
 	public bool IsMapped;
 
+	public bool ValueSet;
+
 	public int Index;
 
 	public readonly List<PropertyHierarchy> Children = new();
+
+	public readonly bool IsKey;
 }
 
 public enum KnownTypes

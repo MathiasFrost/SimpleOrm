@@ -18,7 +18,7 @@ public class SimpleOrmTest
 	{
 		Root? res = await _db.FirstOrDefault<Root>(
 						@"
-select r.*
+select r.*, s.*
 from root r
          join child c on r.Id = c.RootId
          join sibling s on s.Id = r.SiblingId

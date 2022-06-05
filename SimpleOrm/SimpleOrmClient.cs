@@ -27,7 +27,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		await command.Connection.OpenAsync(token).ConfigureAwait(false);
 
 		var rows = new List<object[]>();
-		PropertyHierarchy[] properties = Array.Empty<PropertyHierarchy>();
+		IList<PropertyHierarchy> properties = Array.Empty<PropertyHierarchy>();
 		var first = true;
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
@@ -36,7 +36,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 			reader.GetValues(row);
 			if (first)
 			{
-				properties = reader.FirstTimeCheck<T>(row);
+				properties = reader.BuildHierarchy<T>(row);
 			}
 			rows.Add(row);
 			first = false;
@@ -60,7 +60,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 
 		var res = new T();
 		var first = true;
-		PropertyHierarchy[] properties = Array.Empty<PropertyHierarchy>();
+		IList<PropertyHierarchy> properties = Array.Empty<PropertyHierarchy>();
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
 		{
@@ -68,9 +68,9 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 			reader.GetValues(row);
 			if (first)
 			{
-				properties = reader.FirstTimeCheck<T>(row);
+				properties = reader.BuildHierarchy<T>(row);
 			}
-			res.Parse<T>(row, properties);
+			res.Parse(row, properties);
 			first = false;
 		}
 
