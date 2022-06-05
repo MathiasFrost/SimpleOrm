@@ -16,8 +16,8 @@ public static class Temp
 						@"
 select *
 from root r
-         join child c on r.Id = c.RootId
          join sibling s on s.Id = r.SiblingId
+       left  join child c on r.Id = c.RootId
 		")
 				.ConfigureAwait(false).GetAwaiter().GetResult();
 		Console.WriteLine(JsonSerializer.Serialize(res));

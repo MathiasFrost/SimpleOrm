@@ -8,11 +8,11 @@ namespace SimpleOrm;
 
 public static class SimpleOrmHelper
 {
-	public static IList<PropertyHierarchy> BuildHierarchy<T>(this IDataRecord reader, IReadOnlyList<object> columns)
+	public static List<PropertyHierarchy> BuildHierarchy<T>(this IDataRecord reader, IReadOnlyList<object> columns)
 			where T : new()
 	{
 		Type parentType = typeof(T);
-		List<PropertyHierarchy> properties = parentType.GetProperties().BuildPropertyHierarchy(parentType, true);
+		List<PropertyHierarchy> properties = parentType.GetProperties().BuildPropertyHierarchy(parentType);
 		for (var i = 0; i < reader.FieldCount; i++)
 		{
 			string name = reader.GetName(i);
@@ -50,7 +50,8 @@ public static class SimpleOrmHelper
 			}
 			else if (!property.IsMapped)
 			{
-				res.Add($"Type {property.Parent.Name} has public property {property.PropertyInfo.Name} that was not found among the query results");
+				res.Add(
+						$"Type {property.Parent.Name} has public property {property.PropertyInfo.Name} that was not found among the query results");
 			}
 		}
 		return res;
@@ -79,8 +80,7 @@ public static class SimpleOrmHelper
 
 	private static List<PropertyHierarchy> BuildPropertyHierarchy(
 			this IEnumerable<PropertyInfo> propertyInfo,
-			Type parentType,
-			bool isBase)
+			Type parentType)
 	{
 		var res = new List<PropertyHierarchy>();
 		foreach (PropertyInfo info in propertyInfo)
@@ -88,24 +88,23 @@ public static class SimpleOrmHelper
 			PropertyHierarchy parent;
 			if (info.PropertyType.IsValueType || info.PropertyType == typeof(string))
 			{
-				parent = new PropertyHierarchy(info, parentType, isBase, KnownTypes.Value);
+				parent = new PropertyHierarchy(info, parentType, KnownTypes.Value);
 				res.Add(parent);
 			}
 			else if (typeof(IEnumerable).IsAssignableFrom(info.PropertyType))
 			{
-				parent = new PropertyHierarchy(info, parentType, isBase, KnownTypes.Array);
+				parent = new PropertyHierarchy(info, parentType, KnownTypes.Array);
 				res.Add(parent);
 				parent.Children.AddRange(
 						info.PropertyType.GenericTypeArguments.First()
 								.GetProperties()
-								.BuildPropertyHierarchy(info.PropertyType, false));
+								.BuildPropertyHierarchy(info.PropertyType));
 			}
 			else if (info.PropertyType.IsClass)
 			{
-				parent = new PropertyHierarchy(info, parentType, isBase, KnownTypes.Class);
+				parent = new PropertyHierarchy(info, parentType, KnownTypes.Class);
 				res.Add(parent);
-				parent.Children.AddRange(
-						info.PropertyType.GetProperties().BuildPropertyHierarchy(info.PropertyType, false));
+				parent.Children.AddRange(info.PropertyType.GetProperties().BuildPropertyHierarchy(info.PropertyType));
 			}
 		}
 
@@ -131,7 +130,7 @@ public static class SimpleOrmHelper
 		return property.PropertyInfo.Name;
 	}
 
-	public static void Parse(this object element, object[] row, IList<PropertyHierarchy> properties)
+	public static void Parse(this object element, object[] row, List<PropertyHierarchy> properties)
 	{
 		if (element == null)
 		{
@@ -143,66 +142,40 @@ public static class SimpleOrmHelper
 			switch (prop.KnownTypes)
 			{
 				case KnownTypes.Value:
-					if (prop.ValueSet)
+					if (!prop.ValueSet)
 					{
-						Console.WriteLine("Value type was about to be overriden; First result detected");
-						return;
+						prop.PropertyInfo.SetValue(element, row[prop.Index]);
+						prop.ValueSet = true;
 					}
-
-					Console.WriteLine("Value");
-					prop.PropertyInfo.SetValue(element, row[prop.Index]);
-					prop.ValueSet = true;
 					break;
 				case KnownTypes.Class:
-					if (prop.ValueSet)
+					if (!prop.ValueSet)
 					{
-						Console.WriteLine("Class type was about to be overriden; First result detected");
-						return;
+						object @class = prop.GetConstructor().Invoke(Array.Empty<object>());
+						prop.PropertyInfo.SetValue(element, @class);
+						@class.Parse(row, prop.Children);
+						prop.ValueSet = true;
 					}
-
-					Console.WriteLine("Class");
-					ConstructorInfo? constructor = prop.PropertyInfo.PropertyType.GetConstructor(Array.Empty<Type>());
-					if (constructor == null)
-					{
-						throw new Exception(
-								$"Property {prop.PropertyInfo.Name} did not have a parameterless constructor");
-					}
-					object @class = constructor.Invoke(Array.Empty<object>());
-					prop.PropertyInfo.SetValue(element, @class);
-					prop.ValueSet = true;
-					@class.Parse(row, prop.Children);
 					break;
 				case KnownTypes.Array:
-					Console.WriteLine("Array");
+					object array;
+					if (!prop.ValueSet)
+					{
+						array = prop.GetConstructor().Invoke(Array.Empty<object>());
+						prop.PropertyInfo.SetValue(element, array);
+						prop.ValueSet = true;
+					}
+					else
+					{
+						array = prop.PropertyInfo.GetValue(element)!;
+					}
+					object item = prop.GetGenericConstructor().Invoke(Array.Empty<object>());
+					((IList)array).Add(item);
+					item.Parse(row, prop.Children);
 					break;
 				default: throw new ArgumentOutOfRangeException(nameof(prop), "Unexpected");
 			}
 		}
-	}
-
-	private static T? GetByKeys<T>(
-			this IEnumerable<T> items,
-			IReadOnlyList<PropertyHierarchy> baseProps,
-			IReadOnlyList<object> columns) where T : new()
-	{
-		foreach (T item in items)
-		{
-			var found = false;
-			for (var i = 0; i < baseProps.Count; i++)
-			{
-				if (baseProps[i].PropertyInfo.GetValue(item) == columns[i])
-				{
-					found = true;
-				}
-			}
-			if (!found)
-			{
-				continue;
-			}
-			return item;
-		}
-
-		return default(T?);
 	}
 }
 
@@ -212,19 +185,16 @@ public class PropertyHierarchy
 
 	public readonly Type Parent;
 
-	public PropertyHierarchy(PropertyInfo propertyInfo, Type parent, bool isBase, KnownTypes knownTypes)
+	public PropertyHierarchy(PropertyInfo propertyInfo, Type parent, KnownTypes knownTypes)
 	{
 		PropertyInfo = propertyInfo;
 		Parent = parent;
-		IsBase = isBase;
 		KnownTypes = knownTypes;
 		IsKey = propertyInfo.GetCustomAttributesData()
 				.Any(data => data.AttributeType.IsAssignableFrom(typeof(KeyAttribute)));
 	}
 
 	public readonly KnownTypes KnownTypes;
-
-	public readonly bool IsBase;
 
 	public bool IsMapped;
 
@@ -235,6 +205,51 @@ public class PropertyHierarchy
 	public readonly List<PropertyHierarchy> Children = new();
 
 	public readonly bool IsKey;
+
+	public ConstructorInfo GetConstructor()
+	{
+		ConstructorInfo? constructor = PropertyInfo.PropertyType.GetConstructor(Array.Empty<Type>());
+		if (constructor == null)
+		{
+			throw new Exception($"Property {PropertyInfo.Name} did not have a parameterless constructor");
+		}
+		return constructor;
+	}
+
+	public ConstructorInfo GetGenericConstructor()
+	{
+		Type type = PropertyInfo.PropertyType.GetGenericArguments().First();
+		ConstructorInfo? constructor = type.GetConstructor(Array.Empty<Type>());
+		if (constructor == null)
+		{
+			throw new Exception($"Property {PropertyInfo.Name} did not have a parameterless constructor");
+		}
+		return constructor;
+	}
+
+	private bool IsNewValue(IReadOnlyList<object> prev, IReadOnlyList<object> curr)
+	{
+		if (IsKey)
+		{
+			return !Equals(prev[Index], curr[Index]);
+		}
+		return true;
+	}
+
+	public void Reset(object[] prev, object[] curr)
+	{
+		switch (KnownTypes)
+		{
+			case KnownTypes.Value when IsNewValue(prev, curr):
+			case KnownTypes.Class when Children.All(c => c.IsNewValue(prev, curr)):
+				ValueSet = false;
+				break;
+		}
+		foreach (PropertyHierarchy child in Children)
+		{
+			child.Reset(prev, curr);
+		}
+	}
 }
 
 public enum KnownTypes

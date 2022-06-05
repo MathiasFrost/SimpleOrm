@@ -60,17 +60,20 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 
 		var res = new T();
 		var first = true;
-		IList<PropertyHierarchy> properties = Array.Empty<PropertyHierarchy>();
+		object[] prev = Array.Empty<object>();
+		var properties = new List<PropertyHierarchy>();
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
 		{
 			var row = new object[reader.FieldCount];
 			reader.GetValues(row);
+			properties.ForEach(p => p.Reset(prev, row));
 			if (first)
 			{
 				properties = reader.BuildHierarchy<T>(row);
 			}
 			res.Parse(row, properties);
+			prev = row;
 			first = false;
 		}
 

@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 using JetBrains.Annotations;
 
 namespace SimpleOrm.Test.Models;
@@ -7,7 +7,7 @@ namespace SimpleOrm.Test.Models;
 [PublicAPI]
 public class Root
 {
-	public ulong Id { get; init; }
+	[Key] public ulong Id { get; init; }
 
 	public string Name { get; init; } = null!;
 
@@ -15,7 +15,7 @@ public class Root
 
 	public Sibling? Sibling { get; init; }
 
-	// public List<Child> Children { get; init; } = new();
+	public List<Child> Children { get; init; } = new();
 }
 
 [PublicAPI]
