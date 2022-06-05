@@ -7,7 +7,7 @@ using SimpleOrm.Models;
 
 namespace SimpleOrm.Helpers;
 
-public static class SimpleOrmHelper
+internal static class SimpleOrmHelper
 {
 	public static List<PropertyHierarchy> BuildHierarchy<T>(this IDataRecord reader, IReadOnlyList<object> columns)
 			where T : new()
@@ -179,15 +179,12 @@ public static class SimpleOrmHelper
 		}
 	}
 
-	public static T? GetByKeys<T>(
-			this IEnumerable<T> element,
-			IEnumerable<PropertyHierarchy> properties,
-			object[] columns)
+	public static T? GetByKeys<T>(this IEnumerable<T> element, List<PropertyHierarchy> properties, object[] columns)
 	{
 		List<PropertyHierarchy> keys = properties.Where(p => p.IsKey).ToList();
 		if (!keys.Any())
 		{
-			throw new Exception($"Type {typeof(T).Name} needs to have at least one property with the Key attribute");
+			keys = properties;
 		}
 		foreach (T el in element)
 		{

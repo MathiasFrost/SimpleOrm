@@ -4,7 +4,7 @@ using SimpleOrm.Enums;
 
 namespace SimpleOrm.Models;
 
-public class PropertyHierarchy
+internal sealed class PropertyHierarchy
 {
 	public readonly PropertyInfo PropertyInfo;
 

@@ -1,21 +1,33 @@
-﻿using System.Data;
-using System.Data.Common;
+﻿using System.Data.Common;
 using JetBrains.Annotations;
 using SimpleOrm.Helpers;
 using SimpleOrm.Models;
 
 namespace SimpleOrm;
 
+/// <summary> </summary>
+/// <typeparam name="TDbConnection"></typeparam>
 [PublicAPI]
 public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, new()
 {
 	private readonly string _connectionString;
 
+	/// <summary> </summary>
+	/// <param name="connectionString"></param>
 	public SimpleOrmClient(string connectionString) => _connectionString = connectionString;
 
+	/// <summary> </summary>
+	/// <param name="sql"></param>
+	/// <typeparam name="T"></typeparam>
+	/// <returns></returns>
 	public List<T> Query<T>(string sql) where T : new() =>
 			QueryAsync<T>(sql).ConfigureAwait(false).GetAwaiter().GetResult();
 
+	/// <summary> </summary>
+	/// <param name="sql"></param>
+	/// <param name="token"></param>
+	/// <typeparam name="T"></typeparam>
+	/// <returns></returns>
 	public async Task<List<T>> QueryAsync<T>(string sql, CancellationToken token = default) where T : new()
 	{
 		await using var connection = new TDbConnection();
@@ -59,6 +71,11 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		return res;
 	}
 
+	/// <summary> </summary>
+	/// <param name="sql"></param>
+	/// <param name="token"></param>
+	/// <typeparam name="T"></typeparam>
+	/// <returns></returns>
 	public async Task<T?> FirstOrDefault<T>(string sql, CancellationToken token = default) where T : new()
 	{
 		await using var connection = new TDbConnection();
