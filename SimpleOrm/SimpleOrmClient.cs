@@ -1,6 +1,8 @@
 ﻿using System.Data;
 using System.Data.Common;
 using JetBrains.Annotations;
+using SimpleOrm.Helpers;
+using SimpleOrm.Models;
 
 namespace SimpleOrm;
 
