@@ -177,6 +177,31 @@ public static class SimpleOrmHelper
 			}
 		}
 	}
+
+	public static T? GetByKeys<T>(
+			this IEnumerable<T> element,
+			IEnumerable<PropertyHierarchy> properties,
+			object[] columns)
+	{
+		List<PropertyHierarchy> keys = properties.Where(p => p.IsKey).ToList();
+		if (!keys.Any())
+		{
+			throw new Exception($"Type {typeof(T).Name} needs to have at least one property with the Key attribute");
+		}
+		foreach (T el in element)
+		{
+			int matches = (from key in keys
+					let value = key.PropertyInfo.GetValue(el)
+					where value != null && value.Equals(columns[key.Index])
+					select key).Count();
+			if (matches == keys.Count)
+			{
+				return el;
+			}
+		}
+
+		return default(T?);
+	}
 }
 
 public class PropertyHierarchy
@@ -227,7 +252,7 @@ public class PropertyHierarchy
 		return constructor;
 	}
 
-	private bool IsNewValue(IReadOnlyList<object> prev, IReadOnlyList<object> curr)
+	public bool IsNewValue(IReadOnlyList<object> prev, IReadOnlyList<object> curr)
 	{
 		if (IsKey)
 		{
@@ -248,6 +273,15 @@ public class PropertyHierarchy
 		foreach (PropertyHierarchy child in Children)
 		{
 			child.Reset(prev, curr);
+		}
+	}
+
+	public void Reset()
+	{
+		ValueSet = false;
+		foreach (PropertyHierarchy child in Children)
+		{
+			child.Reset();
 		}
 	}
 }

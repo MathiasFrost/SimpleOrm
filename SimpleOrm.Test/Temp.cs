@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using MySqlConnector;
 using SimpleOrm.Test.Models;
@@ -12,14 +13,14 @@ public static class Temp
 
 	public static void Run()
 	{
-		Root? res = Db.FirstOrDefault<Root>(
+		IList<Root> res = Db.QueryAsync<Root>(
 						@"
 select *
 from root r
          join sibling s on s.Id = r.SiblingId
-       left  join child c on r.Id = c.RootId
+         join child c on r.Id = c.RootId
 		")
 				.ConfigureAwait(false).GetAwaiter().GetResult();
-		Console.WriteLine(JsonSerializer.Serialize(res));
+		Console.WriteLine(JsonSerializer.Serialize(res, new JsonSerializerOptions{WriteIndented = true}));
 	}
 }

@@ -26,24 +26,35 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		}
 		await command.Connection.OpenAsync(token).ConfigureAwait(false);
 
-		var rows = new List<object[]>();
-		IList<PropertyHierarchy> properties = Array.Empty<PropertyHierarchy>();
+		var res = new List<T>();
 		var first = true;
+		object[] prev = Array.Empty<object>();
+		var properties = new List<PropertyHierarchy>();
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
 		{
 			var row = new object[reader.FieldCount];
 			reader.GetValues(row);
+			properties.ForEach(p => p.Reset(prev, row));
 			if (first)
 			{
 				properties = reader.BuildHierarchy<T>(row);
 			}
-			rows.Add(row);
+
+			T? item = res.GetByKeys(properties, row);
+			if (item == null)
+			{
+				item = new T();
+				res.Add(item);
+				properties.ForEach(p => p.Reset());
+			}
+			item.Parse(row, properties);
+			prev = row;
 			first = false;
 		}
 
 		await reader.CloseAsync().ConfigureAwait(false);
-		return new List<T>();
+		return res;
 	}
 
 	public async Task<T?> FirstOrDefault<T>(string sql, CancellationToken token = default) where T : new()
@@ -58,7 +69,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		}
 		await command.Connection.OpenAsync(token).ConfigureAwait(false);
 
-		var res = new T();
+		var res = new List<T> { new() };
 		var first = true;
 		object[] prev = Array.Empty<object>();
 		var properties = new List<PropertyHierarchy>();
@@ -72,12 +83,18 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 			{
 				properties = reader.BuildHierarchy<T>(row);
 			}
-			res.Parse(row, properties);
+
+			T? item = res.GetByKeys(properties, row);
+			if (item == null)
+			{
+				break;
+			}
+			item.Parse(row, properties);
 			prev = row;
 			first = false;
 		}
 
 		await reader.CloseAsync().ConfigureAwait(false);
-		return res;
+		return res.First();
 	}
 }
