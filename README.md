@@ -1,6 +1,6 @@
 ﻿# Simple ORM
 
-Simple object relational mapping framework based on DbConnection.
+Simple, zero-configuration object relational mapping framework based on DbConnection.
 
 This framework does not make assumptions about the relationships between tables in your database, but rather takes the
 result of an SQL query and infers from the supplied type where class and array properties are supposed to go.
@@ -51,7 +51,7 @@ from root r
 		").ConfigureAwait(false);
 ```
 
-SimpleOrm will map the flat values onto the first property it can find[^1]  and assumes that rows with the same key[^2]
+SimpleOrm will map the flat values onto the first property it can find[^1] and assumes that rows with the same key[^2]
 represents another element for `Root.Children`, resulting in the object:
 
 ```json
@@ -101,5 +101,5 @@ represents another element for `Root.Children`, resulting in the object:
 ]
 ```
 
-[^1]: _(this means that the position of columns with the same name matters)_
+[^1]: _(this means that the position of columns with the same name matters. Note that `[Column("Name")]` can be used)_
 [^2]: _(if no properties are marked with `[Key]`, it will assume all base properties are key)_
