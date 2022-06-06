@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using JetBrains.Annotations;
 using MySqlConnector;

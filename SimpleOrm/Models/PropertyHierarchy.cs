@@ -17,6 +17,14 @@ internal sealed class PropertyHierarchy
 		KnownTypes = knownTypes;
 		IsKey = propertyInfo.GetCustomAttributesData()
 				.Any(data => data.AttributeType.IsAssignableFrom(typeof(KeyAttribute)));
+
+		bool nullable = Nullable.GetUnderlyingType(propertyInfo.PropertyType) != null;
+		if (!nullable)
+		{
+			const string nullableAttribute = "System.Runtime.CompilerServices.NullableAttribute";
+			nullable = propertyInfo.CustomAttributes.Any(data => data.AttributeType.FullName == nullableAttribute);
+		}
+		IsNullable = nullable;
 	}
 
 	public readonly KnownTypes KnownTypes;
@@ -30,6 +38,8 @@ internal sealed class PropertyHierarchy
 	public readonly List<PropertyHierarchy> Children = new();
 
 	public readonly bool IsKey;
+
+	public readonly bool IsNullable;
 
 	public ConstructorInfo GetConstructor()
 	{

@@ -16,7 +16,7 @@ public class SimpleOrmTest
 	[Fact]
 	public async Task Should_FetchFirstOrDefault()
 	{
-		Root? res = await _db.FirstAsync<Root>(
+		Root res = await _db.FirstAsync<Root>(
 						@"
 select *
 from root r

@@ -81,7 +81,9 @@ internal static class SimpleOrmHelper
 
 	private static List<PropertyHierarchy> BuildPropertyHierarchy(
 			this IEnumerable<PropertyInfo> propertyInfo,
-			Type parentType)
+			Type parentType,
+			ushort depth = 0,
+			ushort maxDepth = 20)
 	{
 		var res = new List<PropertyHierarchy>();
 		foreach (PropertyInfo info in propertyInfo)
@@ -94,18 +96,25 @@ internal static class SimpleOrmHelper
 			}
 			else if (typeof(IEnumerable).IsAssignableFrom(info.PropertyType))
 			{
+				if (depth == maxDepth)
+				{
+					continue;
+				}
 				parent = new PropertyHierarchy(info, parentType, KnownTypes.Array);
 				res.Add(parent);
-				parent.Children.AddRange(
-						info.PropertyType.GenericTypeArguments.First()
-								.GetProperties()
-								.BuildPropertyHierarchy(info.PropertyType));
+				PropertyInfo[] props = info.PropertyType.GenericTypeArguments.First().GetProperties();
+				parent.Children.AddRange(props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth));
 			}
 			else if (info.PropertyType.IsClass)
 			{
+				if (depth == maxDepth)
+				{
+					continue;
+				}
 				parent = new PropertyHierarchy(info, parentType, KnownTypes.Class);
 				res.Add(parent);
-				parent.Children.AddRange(info.PropertyType.GetProperties().BuildPropertyHierarchy(info.PropertyType));
+				PropertyInfo[] props = info.PropertyType.GetProperties();
+				parent.Children.AddRange(props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth));
 			}
 		}
 
