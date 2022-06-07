@@ -3,7 +3,7 @@
 Simple, zero-configuration object relational mapping framework based on DbConnection.
 
 This framework does not make assumptions about the relationships between tables in your database, but rather takes the
-result of an SQL query and infers from the supplied type where class and array properties are supposed to go.
+result of an SQL query and infers, from the supplied type, where class and array properties are supposed to go.
 
 ## Examples
 
@@ -43,12 +43,12 @@ public class Child
 We can utilize SimpleOrm to instantiate this model with SQL:
 
 ```csharp
-IList<Root> res = await _db.QueryAsync<Root>(@"
+IList<Root> res = await _db.ToListAsync<Root>(@"
 select *
 from root r
          join sibling s on s.Id = r.SiblingId
          join child c on r.Id = c.RootId
-		").ConfigureAwait(false);
+		", token).ConfigureAwait(false);
 ```
 
 SimpleOrm will map the flat values onto the first property it can find[^1] and assumes that rows with the same key[^2]
