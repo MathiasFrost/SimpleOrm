@@ -62,7 +62,7 @@ internal sealed class PropertyHierarchy
 		return constructor;
 	}
 
-	public bool IsNewValue(IReadOnlyList<object> prev, IReadOnlyList<object> curr)
+	private bool IsNewValue(IReadOnlyList<object> prev, IReadOnlyList<object> curr)
 	{
 		if (IsKey)
 		{
@@ -73,6 +73,7 @@ internal sealed class PropertyHierarchy
 
 	public void Reset(object[] prev, object[] curr)
 	{
+		// ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
 		switch (KnownTypes)
 		{
 			case KnownTypes.Value when IsNewValue(prev, curr):

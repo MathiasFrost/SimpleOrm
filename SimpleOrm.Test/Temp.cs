@@ -14,13 +14,15 @@ public static class Temp
 
 	public static void Run()
 	{
-		var res = Db.First<Root>(
+		var res = Db.FirstOrDefault<Root>(
 				@"
 select *
 from root r
          join sibling s on s.Id = r.SiblingId
          join child c on r.Id = c.RootId
-		");
+where r.Id = :Id
+		",
+				new { Id = 2 });
 		Console.WriteLine(JsonSerializer.Serialize(res, new JsonSerializerOptions { WriteIndented = true }));
 	}
 }

@@ -1,5 +1,4 @@
 ﻿using System.Data.Common;
-using System.Runtime.CompilerServices;
 using JetBrains.Annotations;
 using SimpleOrm.Helpers;
 using SimpleOrm.Models;
@@ -24,34 +23,38 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 
 	/// <summary> Return all the results of a query as a list </summary>
 	/// <param name="sql">SQL code to execute against database</param>
+	/// <param name="params">Object with named parameters matching the ':{Name}' occurrences in the SQL code</param>
 	/// <typeparam name="T">Type that conforms to expected results</typeparam>
 	/// <returns>The list</returns>
-	public List<T> ToList<T>(string sql) where T : new() =>
-			ToListAsync<T>(sql).ConfigureAwait(false).GetAwaiter().GetResult();
+	public List<T> ToList<T>(string sql, object @params) where T : new() =>
+				ToListAsync<T>(sql, @params).ConfigureAwait(false).GetAwaiter().GetResult();
 
 	/// <inheritdoc cref="ToList{T}"/>
-	public async Task<List<T>> ToListAsync<T>(string sql, CancellationToken token = default) where T : new() =>
-			await Query<T>(sql, false, token).ConfigureAwait(false);
+	public async Task<List<T>> ToListAsync<T>(string sql, object @params, CancellationToken token = default)
+				where T : new() =>
+				await Query<T>(sql.Parameterize(@params), false, token).ConfigureAwait(false);
 
 	/// <summary> Return first fully populated object of type </summary>
 	/// <param name="sql">SQL code to execute against database</param>
+	/// <param name="params">Object with named parameters matching the ':{Name}' occurrences in the SQL code</param>
 	/// <typeparam name="T">Type that conforms to expected results</typeparam>
 	/// <returns>The object</returns>
-	public T First<T>(string sql) where T : new() => FirstAsync<T>(sql).ConfigureAwait(false).GetAwaiter().GetResult();
+	public T FirstOrDefault<T>(string sql, object @params) where T : new() =>
+				FirstOrDefaultAsync<T>(sql, @params).ConfigureAwait(false).GetAwaiter().GetResult();
 
-	/// <inheritdoc cref="First{T}"/>
-	public async Task<T> FirstAsync<T>(string sql, CancellationToken token = default) where T : new()
+	/// <inheritdoc cref="FirstOrDefault{T}"/>
+	public async Task<T> FirstOrDefaultAsync<T>(string sql, object @params, CancellationToken token = default)
+				where T : new()
 	{
-		List<T> res = await Query<T>(sql, true, token).ConfigureAwait(false);
+		List<T> res = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
 		return res.First();
 	}
 
 	/// <inheritdoc cref="ToList{T}"/>
-	private async Task<List<T>> Query<T>(string sql, bool breakOnFound, CancellationToken token = default)
-			where T : new()
+	private async Task<List<T>> Query<T>(string sql, bool breakOnFirst, CancellationToken token = default)
+				where T : new()
 	{
-		var connection = new TDbConnection();
-		await using ConfiguredAsyncDisposable _ = connection.ConfigureAwait(false);
+		await using var connection = new TDbConnection();
 		connection.ConnectionString = _connectionString;
 		DbCommand command = connection.CreateCommand();
 		command.CommandText = sql;
@@ -59,14 +62,14 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		{
 			throw new Exception("Connection could not be established");
 		}
-		await command.Connection.OpenAsync(token).ConfigureAwait(false);
 
+		await command.Connection.OpenAsync(token).ConfigureAwait(false);
 		var res = new List<T> { new() };
 		var first = true;
 		object[] prev = Array.Empty<object>();
 		var properties = new List<PropertyHierarchy>();
-		DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
-		await using ConfiguredAsyncDisposable __ = reader.ConfigureAwait(false);
+
+		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
 		{
 			var row = new object[reader.FieldCount];
@@ -82,7 +85,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 			if (item == null)
 			{
 				// We only want first full result here
-				if (breakOnFound)
+				if (breakOnFirst)
 				{
 					break;
 				}

@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
+using System.Data.SqlTypes;
 using System.Reflection;
 using SimpleOrm.Enums;
 using SimpleOrm.Models;
@@ -10,7 +11,7 @@ namespace SimpleOrm.Helpers;
 internal static class SimpleOrmHelper
 {
 	public static List<PropertyHierarchy> BuildHierarchy<T>(this IDataRecord reader, IReadOnlyList<object> columns)
-			where T : new()
+				where T : new()
 	{
 		Type parentType = typeof(T);
 		List<PropertyHierarchy> properties = parentType.GetProperties().BuildPropertyHierarchy(parentType);
@@ -52,7 +53,7 @@ internal static class SimpleOrmHelper
 			else if (!property.IsMapped)
 			{
 				res.Add(
-						$"Type {property.Parent.Name} has public property {property.PropertyInfo.Name} that was not found among the query results");
+							$"Type {property.Parent.Name} has public property {property.PropertyInfo.Name} that was not found among the query results");
 			}
 		}
 		return res;
@@ -61,8 +62,7 @@ internal static class SimpleOrmHelper
 	private static PropertyHierarchy? FindFirstNotMapped(this IList<PropertyHierarchy> properties, string name)
 	{
 		PropertyHierarchy? found = properties.FirstOrDefault(
-				info => !info.IsMapped
-				        && String.Equals(name, info.GetColumnName(), StringComparison.Ordinal));
+					info => !info.IsMapped && String.Equals(name, info.GetColumnName(), StringComparison.Ordinal));
 
 		if (found != null)
 		{
@@ -80,10 +80,10 @@ internal static class SimpleOrmHelper
 	}
 
 	private static List<PropertyHierarchy> BuildPropertyHierarchy(
-			this IEnumerable<PropertyInfo> propertyInfo,
-			Type parentType,
-			ushort depth = 0,
-			ushort maxDepth = 20)
+				this IEnumerable<PropertyInfo> propertyInfo,
+				Type parentType,
+				ushort depth = 0,
+				ushort maxDepth = 20)
 	{
 		var res = new List<PropertyHierarchy>();
 		foreach (PropertyInfo info in propertyInfo)
@@ -198,9 +198,9 @@ internal static class SimpleOrmHelper
 		foreach (T el in element)
 		{
 			int matches = (from key in keys
-					let value = key.PropertyInfo.GetValue(el)
-					where value != null && value.Equals(columns[key.Index])
-					select key).Count();
+						let value = key.PropertyInfo.GetValue(el)
+						where value != null && value.Equals(columns[key.Index])
+						select key).Count();
 			if (matches == keys.Count)
 			{
 				return el;
@@ -209,4 +209,31 @@ internal static class SimpleOrmHelper
 
 		return default(T?);
 	}
+
+	public static string Parameterize(this string sql, object @params)
+	{
+		PropertyInfo[] props = @params.GetType().GetProperties();
+		foreach (PropertyInfo prop in props)
+		{
+			object val = prop.GetValue(@params) ?? "null";
+			if (prop.PropertyType.IsValueType)
+			{
+				sql = sql.Replace($":{prop.Name}", val.ToString());
+			}
+			else if (prop.PropertyType.IsAssignableFrom(typeof(string)))
+			{
+				string str = ((string)val).EscapeSingleQuotes();
+				sql = sql.Replace($":{prop.Name}", $"'{str}'");
+			}
+			else if (prop.PropertyType.IsAssignableFrom(typeof(DateTime)))
+			{
+				string str = ((DateTime)val).ToString("yyyy-MM-dd HH:mm:ss").EscapeSingleQuotes();
+				sql = sql.Replace($":{prop.Name}", $"'{str}'");
+			}
+		}
+
+		return sql;
+	}
+
+	private static string EscapeSingleQuotes(this string sql) => sql.Replace("'", @"\'");
 }
