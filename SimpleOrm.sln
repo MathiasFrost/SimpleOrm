@@ -1,8 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleOrm", "SimpleOrm\SimpleOrm.csproj", "{4659F7A3-7E75-468A-8255-7146B594B9B8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleOrm", "Source\SimpleOrm.csproj", "{4659F7A3-7E75-468A-8255-7146B594B9B8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleOrm.Test", "SimpleOrm.Test\SimpleOrm.Test.csproj", "{45041786-586B-4332-82A7-DFE256F03CD4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleOrm.Test", "Test\SimpleOrm.Test.csproj", "{45041786-586B-4332-82A7-DFE256F03CD4}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionFolder", "SolutionFolder", "{D41CE1D3-3F2B-4391-8976-55A0555207C4}"
 	ProjectSection(SolutionItems) = preProject
