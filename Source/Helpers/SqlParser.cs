@@ -31,7 +31,7 @@ internal sealed class SqlParser
 			case ']' when Statement is not Statement.String and Statement.Brackets:
 				Statement = Statement.None;
 				break;
-			case ':' when Statement is not Statement.String:
+			case ':' when Statement is not Statement.String and not Statement.Backticks:
 				Statement = Statement.Parameter;
 				break;
 		}
