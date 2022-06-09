@@ -1,10 +1,7 @@
 ﻿using System.Collections;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
-using System.Data.SqlTypes;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using SimpleOrm.Enums;
 using SimpleOrm.Models;
 
@@ -214,56 +211,67 @@ internal static class SimpleOrmHelper
 
 	public static string Parameterize(this string sql, object @params)
 	{
-		PropertyInfo[] props = @params.GetType().GetProperties();
-		foreach (PropertyInfo prop in props)
+		Dictionary<string, PropertyInfo> props = @params.GetType().GetProperties().ToDictionary(info => info.Name);
+		var res = "";
+		var parser = new SqlParser();
+		for (var i = 0; i < sql.Length; i++)
 		{
-			var parser = new SqlParser();
-			var res = "";
-			for (var i = 0; i < sql.Length; i++)
+			char c = sql[i];
+			parser.WillEscape = false;
+			switch (parser.Statement)
 			{
-				char c = sql[i];
-				parser.WillEscape = false;
-				switch (parser.Statement)
-				{
-					case Statement.None:
-						res += c;
-						break;
-					case Statement.String:
-						res += $"\\{c}";
-						break;
-					case Statement.Parameter:
-						object val = prop.GetValue(@params) ?? "null";
-						var valStr = String.Empty;
-						if (prop.PropertyType.IsValueType)
+				case Statement.None:
+					res += c;
+					break;
+				case Statement.String:
+					res += $"\\{c}";
+					break;
+				case Statement.Parameter:
+					int j = i + 1;
+					for (; j < sql.Length; j++)
+					{
+						if (!Char.IsLetterOrDigit(sql[j]))
 						{
-							valStr = val.ToString();
+							break;
 						}
-						else if (prop.PropertyType.IsAssignableFrom(typeof(string)))
-						{
-							valStr = ((string)val).EscapeSingleQuotes();
-						}
-						else if (prop.PropertyType.IsAssignableFrom(typeof(DateTime)))
-						{
-							valStr = ((DateTime)val).ToString("yyyy-MM-dd HH:mm:ss").EscapeSingleQuotes();
-						}
-						res += valStr;
-						Match match = Regex.Match(sql[i..], @"\b");
-						i += match.Index;
-						parser.Statement = Statement.None;
-						break;
-					case Statement.Backticks:
-						res += c;
-						break;
-					case Statement.Brackets: break;
-					default: throw new ArgumentOutOfRangeException(nameof(parser), "Unexpected");
-				}
-				
-				
-				parser.Update(c);
+					}
+
+					string name = sql[i..j];
+					PropertyInfo prop = props[name];
+					object val = prop.GetValue(@params) ?? "null";
+
+					var valStr = String.Empty;
+					if (prop.PropertyType.IsValueType)
+					{
+						valStr = val.ToString();
+					}
+					else if (prop.PropertyType.IsAssignableFrom(typeof(string)))
+					{
+						valStr = ((string)val).EscapeSingleQuotes();
+					}
+					else if (prop.PropertyType.IsAssignableFrom(typeof(DateTime)))
+					{
+						valStr = ((DateTime)val).ToString("yyyy-MM-dd HH:mm:ss").EscapeSingleQuotes();
+					}
+
+					i--;
+					res = res[..i];
+					i = ++j;
+
+					res += '\'' + valStr + '\'';
+					parser.Statement = Statement.None;
+					break;
+				case Statement.Backticks:
+					res += c;
+					break;
+				case Statement.Brackets: break;
+				default: throw new ArgumentOutOfRangeException(nameof(parser), "Unexpected");
 			}
+
+			parser.Update(c);
 		}
 
-		return sql;
+		return res;
 	}
 
 	private static string EscapeSingleQuotes(this string sql) => sql.Replace("'", @"\'");

@@ -7,7 +7,7 @@ public class ParseTest
 {
 	private const string Sql = "select `Wierd:Name Test` from test where Name <> :Name";
 
-	private const string Truth = "select `Wierd:Name Test` from test where Name <> '\'; delete * from test; --'";
+	private const string Truth = @"select `Wierd:Name Test` from test where Name <> '\'; delete * from test; --'";
 	
 		[Fact]
 	public void ShouldParseCorrectly()
