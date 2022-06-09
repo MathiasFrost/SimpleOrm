@@ -13,7 +13,8 @@ internal static class SimpleOrmHelper
 				where T : new()
 	{
 		Type parentType = typeof(T);
-		List<PropertyHierarchy> properties = parentType.GetProperties().BuildPropertyHierarchy(parentType);
+		List<PropertyHierarchy> properties
+					= parentType.GetProperties().AsEnumerable().BuildPropertyHierarchy(parentType);
 		for (var i = 0; i < reader.FieldCount; i++)
 		{
 			string name = reader.GetName(i);
@@ -58,18 +59,16 @@ internal static class SimpleOrmHelper
 		return res;
 	}
 
-	private static PropertyHierarchy? FindFirstNotMapped(this IList<PropertyHierarchy> properties, string name)
+	private static PropertyHierarchy? FindFirstNotMapped(this IEnumerable<PropertyHierarchy> properties, string name)
 	{
-		PropertyHierarchy? found = properties.FirstOrDefault(
-					info => !info.IsMapped && String.Equals(name, info.GetColumnName(), StringComparison.Ordinal));
+		foreach (PropertyHierarchy property in properties)
+		{
+			if (!property.IsMapped && name == property.GetColumnName())
+			{
+				return property;
+			}
 
-		if (found != null)
-		{
-			return found;
-		}
-		foreach (PropertyHierarchy propertyHierarchy in properties)
-		{
-			found = propertyHierarchy.Children.FindFirstNotMapped(name);
+			PropertyHierarchy? found = property.Children.FindFirstNotMapped(name);
 			if (found != null)
 			{
 				return found;
@@ -78,11 +77,10 @@ internal static class SimpleOrmHelper
 		return null;
 	}
 
-	private static List<PropertyHierarchy> BuildPropertyHierarchy(
-				this IEnumerable<PropertyInfo> propertyInfo,
-				Type parentType,
-				ushort depth = 0,
-				ushort maxDepth = 20)
+	private static List<PropertyHierarchy> BuildPropertyHierarchy(this IEnumerable<PropertyInfo> propertyInfo,
+	                                                              Type parentType,
+	                                                              ushort depth = 0,
+	                                                              ushort maxDepth = 20)
 	{
 		var res = new List<PropertyHierarchy>();
 		foreach (PropertyInfo info in propertyInfo)
@@ -102,7 +100,7 @@ internal static class SimpleOrmHelper
 				parent = new PropertyHierarchy(info, parentType, KnownTypes.Array);
 				res.Add(parent);
 				PropertyInfo[] props = info.PropertyType.GenericTypeArguments.First().GetProperties();
-				parent.Children.AddRange(props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth));
+				parent.Children = props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth);
 			}
 			else if (info.PropertyType.IsClass)
 			{
@@ -113,7 +111,7 @@ internal static class SimpleOrmHelper
 				parent = new PropertyHierarchy(info, parentType, KnownTypes.Class);
 				res.Add(parent);
 				PropertyInfo[] props = info.PropertyType.GetProperties();
-				parent.Children.AddRange(props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth));
+				parent.Children = props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth);
 			}
 		}
 
@@ -139,7 +137,7 @@ internal static class SimpleOrmHelper
 		return property.PropertyInfo.Name;
 	}
 
-	public static void Parse(this object element, object[] row, List<PropertyHierarchy> properties)
+	public static void Parse(this object element, object[] row, IEnumerable<PropertyHierarchy> properties)
 	{
 		if (element == null)
 		{

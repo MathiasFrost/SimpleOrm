@@ -93,6 +93,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 				// Else we want all results
 				item = new T();
 				res.Add(item);
+
 				properties.ForEach(p => p.Reset());
 			}
 			item.Parse(row, properties);

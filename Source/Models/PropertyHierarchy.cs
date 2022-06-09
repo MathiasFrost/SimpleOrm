@@ -35,7 +35,7 @@ internal sealed class PropertyHierarchy
 
 	public int Index;
 
-	public readonly List<PropertyHierarchy> Children = new();
+	public IEnumerable<PropertyHierarchy> Children = Enumerable.Empty<PropertyHierarchy>();
 
 	public readonly bool IsKey;
 
