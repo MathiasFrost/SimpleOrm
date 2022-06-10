@@ -4,9 +4,5 @@ namespace SimpleOrm.Test;
 
 public class TypeTest
 {
-	[Fact]
-	public void ShouldParseCorrectly()
-	{
-		
-	}
+	[Fact] public void ShouldParseCorrectly() { }
 }

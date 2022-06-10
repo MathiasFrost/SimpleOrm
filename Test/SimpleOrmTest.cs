@@ -10,10 +10,6 @@ namespace SimpleOrm.Test;
 
 public class SimpleOrmTest
 {
-	private readonly ITestOutputHelper _testOutputHelper;
-
-	private readonly SimpleOrmClient<MySqlConnection> _db;
-
 	public const string ConnectionString = "server=localhost;userid=zoru;password=1012;database=test";
 
 	public const string Sql = @"
@@ -22,6 +18,12 @@ from root r
          join sibling s on s.Id = r.SiblingId
          join child c on r.Id = c.RootId
 ";
+
+	private const string NoResults = Sql + "\nwhere r.Id = -1";
+
+	private readonly SimpleOrmClient<MySqlConnection> _db;
+
+	private readonly ITestOutputHelper _testOutputHelper;
 
 	public SimpleOrmTest(ITestOutputHelper testOutputHelper)
 	{
@@ -37,18 +39,28 @@ from root r
 	}
 
 	[Fact]
+	public async Task ShouldBeNull_IfNoResults()
+	{
+		Root? @null = await _db.FirstOrDefaultAsync<Root>(NoResults, new { }).ConfigureAwait(false);
+		Assert.Null(@null);
+	}
+
+	[Fact]
 	public async Task Should_FetchAll()
 	{
 		DateTime start = DateTime.Now;
 
 		// Simple Orm query
 		IList<Root> res = await _db.ToListAsync<Root>(Sql, new { }).ConfigureAwait(false);
+
 		Assert.NotEmpty(res);
+
 		var ms = (DateTime.Now - start).TotalMilliseconds.ToString("F");
 		_testOutputHelper.WriteLine($"SimpleOrm query took {ms}ms");
 
 		// Naked query for comparison
 		start = DateTime.Now;
+
 		await using var connection = new MySqlConnection(ConnectionString);
 		connection.ConnectionString = ConnectionString;
 		MySqlCommand command = connection.CreateCommand();
@@ -72,6 +84,7 @@ from root r
 
 		ms = (DateTime.Now - start).TotalMilliseconds.ToString("F");
 		_testOutputHelper.WriteLine($"Naked query took {ms}ms");
+
 		Assert.NotEmpty(res);
 	}
 }

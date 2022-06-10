@@ -6,9 +6,23 @@ namespace SimpleOrm.Models;
 
 internal sealed class PropertyHierarchy
 {
-	public readonly PropertyInfo PropertyInfo;
+	public readonly bool IsKey;
+
+	public readonly bool IsNullable;
+
+	public readonly KnownTypes KnownTypes;
 
 	public readonly Type Parent;
+
+	public readonly PropertyInfo PropertyInfo;
+
+	public IEnumerable<PropertyHierarchy> Children = Enumerable.Empty<PropertyHierarchy>();
+
+	public int Index;
+
+	public bool IsMapped;
+
+	public bool ValueSet;
 
 	public PropertyHierarchy(PropertyInfo propertyInfo, Type parent, KnownTypes knownTypes)
 	{
@@ -16,30 +30,22 @@ internal sealed class PropertyHierarchy
 		Parent = parent;
 		KnownTypes = knownTypes;
 		IsKey = propertyInfo.GetCustomAttributesData()
-				.Any(data => data.AttributeType.IsAssignableFrom(typeof(KeyAttribute)));
+					.Any(data => data.AttributeType.IsAssignableFrom(typeof(KeyAttribute)));
 
-		bool nullable = Nullable.GetUnderlyingType(propertyInfo.PropertyType) != null;
-		if (!nullable)
-		{
-			const string nullableAttribute = "System.Runtime.CompilerServices.NullableAttribute";
-			nullable = propertyInfo.CustomAttributes.Any(data => data.AttributeType.FullName == nullableAttribute);
-		}
-		IsNullable = nullable;
+		IsNullable = CheckIfNullable(propertyInfo.PropertyType);
 	}
 
-	public readonly KnownTypes KnownTypes;
-
-	public bool IsMapped;
-
-	public bool ValueSet;
-
-	public int Index;
-
-	public IEnumerable<PropertyHierarchy> Children = Enumerable.Empty<PropertyHierarchy>();
-
-	public readonly bool IsKey;
-
-	public readonly bool IsNullable;
+	private static bool CheckIfNullable(Type type)
+	{
+		bool isNullable = Nullable.GetUnderlyingType(type) != null;
+		if (isNullable)
+		{
+			return isNullable;
+		}
+		const string nullableAttribute = "System.Runtime.CompilerServices.NullableAttribute";
+		isNullable = type.CustomAttributes.Any(data => data.AttributeType.FullName == nullableAttribute);
+		return isNullable;
+	}
 
 	public ConstructorInfo GetConstructor()
 	{

@@ -6,7 +6,7 @@ using SimpleOrm.Models;
 namespace SimpleOrm;
 
 /// <summary>Minimalistic, zero-configuration ORM framework</summary>
-/// <typeparam name="TDbConnection">Implementation of <see cref="DbConnection"/> to use</typeparam>
+/// <typeparam name="TDbConnection">Implementation of <see cref="DbConnection" /> to use</typeparam>
 [PublicAPI]
 public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, new()
 {
@@ -15,9 +15,9 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 
 	/// <summary>Create a new Simple ORM client</summary>
 	/// <param name="connectionString">
-	/// <ul>
-	///		<li>MariaDB - $"server={Server};userid={User};password={PW};database={DB}"</li>
-	/// </ul>
+	///     <ul>
+	///         <li>MariaDB - $"server={Server};userid={User};password={PW};database={DB}"</li>
+	///     </ul>
 	/// </param>
 	public SimpleOrmClient(string connectionString) => _connectionString = connectionString;
 
@@ -29,29 +29,32 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 	public List<T> ToList<T>(string sql, object @params) where T : new() =>
 				ToListAsync<T>(sql, @params).ConfigureAwait(false).GetAwaiter().GetResult();
 
-	/// <inheritdoc cref="ToList{T}"/>
+	/// <inheritdoc cref="ToList{T}" />
 	public async Task<List<T>> ToListAsync<T>(string sql, object @params, CancellationToken token = default)
-				where T : new() =>
-				await Query<T>(sql.Parameterize(@params), false, token).ConfigureAwait(false);
+				where T : new()
+	{
+		(List<T> res, bool _) = await Query<T>(sql.Parameterize(@params), false, token).ConfigureAwait(false);
+		return res;
+	}
 
 	/// <summary> Return first fully populated object of type </summary>
 	/// <param name="sql">SQL code to execute against database</param>
 	/// <param name="params">Object with named parameters matching the ':{Name}' occurrences in the SQL code</param>
 	/// <typeparam name="T">Type that conforms to expected results</typeparam>
-	/// <returns>The object</returns>
-	public T FirstOrDefault<T>(string sql, object @params) where T : new() =>
+	/// <returns>The object if query returned any results and default if not</returns>
+	public T? FirstOrDefault<T>(string sql, object @params) where T : new() =>
 				FirstOrDefaultAsync<T>(sql, @params).ConfigureAwait(false).GetAwaiter().GetResult();
 
-	/// <inheritdoc cref="FirstOrDefault{T}"/>
-	public async Task<T> FirstOrDefaultAsync<T>(string sql, object @params, CancellationToken token = default)
+	/// <inheritdoc cref="FirstOrDefault{T}" />
+	public async Task<T?> FirstOrDefaultAsync<T>(string sql, object @params, CancellationToken token = default)
 				where T : new()
 	{
-		List<T> res = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
-		return res.First();
+		(List<T> res, bool first) = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
+		return first ? default(T) : res.First();
 	}
 
-	/// <inheritdoc cref="ToList{T}"/>
-	private async Task<List<T>> Query<T>(string sql, bool breakOnFirst, CancellationToken token = default)
+	/// <inheritdoc cref="ToList{T}" />
+	private async Task<(List<T>, bool)> Query<T>(string sql, bool breakOnFirst, CancellationToken token = default)
 				where T : new()
 	{
 		await using var connection = new TDbConnection();
@@ -80,7 +83,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 				properties = reader.BuildHierarchy<T>(row);
 			}
 
-			// First iteration will always be null
+			// First iteration GetByKeys will always be null
 			T? item = first ? res.First() : res.GetByKeys(properties, row);
 			if (item == null)
 			{
@@ -102,6 +105,6 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		}
 
 		await reader.CloseAsync().ConfigureAwait(false);
-		return res;
+		return (res, first);
 	}
 }
