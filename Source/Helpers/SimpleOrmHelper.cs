@@ -171,10 +171,10 @@ internal static class SimpleOrmHelper
 			parser.WillEscape = false;
 			switch (parser.Statement)
 			{
-				case Statement.None:
-					res += c;
-					break;
+				case Statement.Backticks: // Might need other functionality for brackets, string and backticks
+				case Statement.Brackets:
 				case Statement.String:
+				case Statement.None:
 					res += c;
 					break;
 				case Statement.Parameter:
@@ -217,10 +217,6 @@ internal static class SimpleOrmHelper
 
 					parser.Statement = Statement.None;
 					break;
-				case Statement.Backticks:
-					res += c;
-					break;
-				case Statement.Brackets: break;
 				default: throw new ArgumentOutOfRangeException(nameof(parser), "Unexpected");
 			}
 
