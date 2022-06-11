@@ -30,9 +30,12 @@ internal static class SimpleOrmHelper
 			{
 				res.AddRange(prop.Children.CheckHierarchy());
 			}
-			else if (prop.Error != null)
+			else if (prop.DbColumn == null && prop.Parent?.IsNullable == false)
 			{
-				res.Add(prop.Error);
+				string? parentName = prop.Parent?.Type.Name;
+				string name = prop.Type.Name;
+				string err = $"Type {parentName} has not nullable public property {name} not found among query results";
+				res.Add(err);
 			}
 		}
 		return res;
@@ -93,7 +96,7 @@ internal static class SimpleOrmHelper
 				case SupportedTypes.Value:
 					if (!prop.ValueSet)
 					{
-						prop.SetValue(element, row[prop.Index]);
+						prop.SetValue(element, row);
 						prop.ValueSet = true;
 					}
 					break;

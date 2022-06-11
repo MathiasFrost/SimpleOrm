@@ -12,7 +12,7 @@ public class Root
 	public string Name { get; init; } = null!;
 
 	public ulong SiblingId { get; init; }
-	
+
 	public Sibling? Sibling { get; init; }
 
 	public List<Child> Children { get; init; } = new();

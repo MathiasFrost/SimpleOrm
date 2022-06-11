@@ -15,8 +15,8 @@ public class SimpleOrmTest
 	public const string Sql = @"
 select *
 from root r
-         join sibling s on s.Id = r.SiblingId
-         join child c on r.Id = c.RootId
+        join sibling s on s.Id = r.SiblingId
+        join child c on r.Id = c.RootId
 ";
 
 	private const string NoResults = Sql + "where r.Id = -1";
