@@ -3,16 +3,17 @@
 Simple, zero-configuration object relational mapping framework based on DbConnection.
 
 This framework does not make assumptions about the relationships between tables in your database, but rather takes the
-result of an SQL query and infers, from the supplied type, where class and array properties are supposed to go.
+result of an SQL query and infers, from the supplied type, where values are supposed to go.
 
 ## Examples
 
 Consider the model:
 
 ```csharp
+[PublicAPI, Table("root")]
 public class Root
 {
-	[Key] public ulong Id { get; init; }
+	public ulong Id { get; init; }
 
 	public string Name { get; init; } = null!;
 
@@ -23,6 +24,7 @@ public class Root
 	public List<Child> Children { get; init; } = new();
 }
 
+[PublicAPI, Table("sibling")]
 public class Sibling
 {
 	public ulong Id { get; init; }
@@ -30,6 +32,7 @@ public class Sibling
 	public string Name { get; init; } = null!;
 }
 
+[PublicAPI, Table("child")]
 public class Child
 {
 	public ulong Id { get; init; }
@@ -51,8 +54,8 @@ from root r
 		", token).ConfigureAwait(false);
 ```
 
-SimpleOrm will map the flat values onto the first property it can find[^1] and assumes that rows with the same key[^2]
-represents another element for `Root.Children`, resulting in the object:
+SimpleOrm will map the flat values onto the property matching the schema, table and column name[^1] and assumes that
+rows with the same keys[^2] represents another element for `Root.Children`, resulting in the object:
 
 ```json
 [
@@ -101,5 +104,5 @@ represents another element for `Root.Children`, resulting in the object:
 ]
 ```
 
-[^1]: _(this means that the position of columns with the same name matters. Note that `[Column("Name")]` can be used)_
-[^2]: _(if no properties are marked with `[Key]`, it will assume all base properties are key)_
+[^1]: _(Case sensitive. Schema is by default not specified and Table name is the name of the class or the one specified in `[Table("Name")]`. Column is the name of the property or the one specified in `[Column("Name")]`)_
+[^2]: _(Keys are fetched from DB info. If there are no keys, it will treat all base columns as keys)_

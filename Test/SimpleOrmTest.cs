@@ -35,7 +35,7 @@ from root r
 	[Fact]
 	public async Task Should_FetchFirstOrDefault()
 	{
-		Root? res = await _db.FirstOrDefaultAsync<Root>(Sql, new { }).ConfigureAwait(false);
+		Root res = await _db.FirstAsync<Root>(Sql, new { }).ConfigureAwait(false);
 		Assert.NotNull(res);
 	}
 
