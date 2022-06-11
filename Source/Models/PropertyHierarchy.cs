@@ -18,21 +18,21 @@ internal class PropertyHierarchy
 
 	private readonly string? _table;
 
+	public readonly ConstructorInfo? Constructor;
+
 	public readonly Type? GenericType;
+
+	public readonly ConstructorInfo? ListConstructor;
 
 	public readonly PropertyInfo? PropertyInfo;
 
-	public readonly Type Type;
-
 	public readonly SupportedTypes SupportedType;
+
+	public readonly Type Type;
 
 	public List<PropertyHierarchy> Children = new();
 
 	public ValueSetResult ValueSet = ValueSetResult.NotSet;
-
-	public readonly ConstructorInfo? Constructor;
-
-	public readonly ConstructorInfo? ListConstructor;
 
 	/// <summary>Constructor for root</summary>
 	public PropertyHierarchy(Type type)
