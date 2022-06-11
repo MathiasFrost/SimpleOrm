@@ -99,7 +99,8 @@ from root r
 	[Fact]
 	public async Task ShouldExecuteSuccessfully()
 	{
-		int rows = await _db.ExecuteAsync(@"update root set Name = :name where Id = :id", new {id = 1, name = "Some root"});
+		const string sql = @"update root set Name = :name where Id = :id";
+		int rows = await _db.ExecuteAsync(sql, new { id = 1, name = "Some root" });
 		Assert.True(rows == 1);
 	}
 }
