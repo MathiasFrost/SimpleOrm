@@ -190,7 +190,7 @@ internal class PropertyHierarchy
 		{
 			if (!_isNullable && _parent?._isNullable != true)
 			{
-				throw new Exception($"{PropertyInfo!.Name} is not nullable but query returned null");
+				throw new Exception($"'{PropertyInfo!.Name}' is not nullable but query returned null");
 			}
 		}
 		else
@@ -215,7 +215,7 @@ internal class PropertyHierarchy
 		{
 			if (!_isNullable)
 			{
-				throw new Exception($"{PropertyInfo!.Name} is not nullable but query returned null");
+				throw new Exception($"'{PropertyInfo!.Name}' is not nullable but query returned null");
 			}
 		}
 		else

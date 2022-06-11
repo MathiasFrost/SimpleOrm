@@ -20,7 +20,7 @@ public class ParseTest
 	{
 		DateTime start = DateTime.Now;
 
-		string actual = Sql.Parameterize(new { Name = "'; delete * from test; --" });
+		string actual = Sql.Parameterize(new { Name = "'; delete * from test; --" }, _testOutputHelper.WriteLine);
 
 		var ms = (DateTime.Now - start).TotalMilliseconds.ToString("F");
 		_testOutputHelper.WriteLine($"Parsing took {ms}ms");

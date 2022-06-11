@@ -10,7 +10,6 @@ namespace SimpleOrm.Helpers;
 internal static class SimpleOrmHelper
 {
 	public static PropertyHierarchy BuildAndCheckHierarchy<T>(IReadOnlyCollection<DbColumn> dbColumns, ushort maxDepth)
-				where T : new()
 	{
 		var parent = new PropertyHierarchy(typeof(T));
 		parent.Children = parent.Type.GetRelevantProperties().BuildHierarchy(parent, dbColumns, maxDepth);
@@ -42,9 +41,9 @@ internal static class SimpleOrmHelper
 			}
 			else if (prop.IsFaulty)
 			{
-				string? parentName = prop.ParentName;
+				string? pName = prop.ParentName;
 				string? name = prop.PropertyInfo?.Name;
-				string err = $"Type {parentName} has not nullable public property {name} not found among query results";
+				string err = $"Type '{pName}' has not nullable public property '{name}' not found among query results";
 				res.Add(err);
 			}
 		}
@@ -161,7 +160,7 @@ internal static class SimpleOrmHelper
 		return default(T?);
 	}
 
-	public static string Parameterize(this string sql, object @params, Action<string>? log = null)
+	public static string Parameterize(this string sql, object @params, Action<string>? log)
 	{
 		Dictionary<string, PropertyInfo> props = @params.GetType().GetProperties().ToDictionary(info => info.Name);
 		var res = "";
@@ -176,7 +175,7 @@ internal static class SimpleOrmHelper
 					res += c;
 					break;
 				case Statement.String:
-					res += $"\\{c}";
+					res += c;
 					break;
 				case Statement.Parameter:
 					int j = i + 1;
@@ -199,18 +198,23 @@ internal static class SimpleOrmHelper
 					}
 					else if (typeof(string).IsAssignableFrom(prop.PropertyType))
 					{
-						valStr = ((string)val).EscapeSingleQuotes();
+						valStr = '\'' + ((string)val).EscapeSingleQuotes() + '\'';
 					}
 					else if (typeof(DateTime).IsAssignableFrom(prop.PropertyType))
 					{
-						valStr = ((DateTime)val).ToString("yyyy-MM-dd HH:mm:ss").EscapeSingleQuotes();
+						valStr = '\'' + ((DateTime)val).ToString("yyyy-MM-dd HH:mm:ss").EscapeSingleQuotes() + '\'';
 					}
 
+					// Clip ':'
 					i--;
 					res = res[..i];
-					i = ++j;
 
-					res += '\'' + valStr + '\'';
+					res += valStr;
+
+					// Update sql
+					sql = res + sql[j..];
+					i += valStr!.Length - 1;
+
 					parser.Statement = Statement.None;
 					break;
 				case Statement.Backticks:

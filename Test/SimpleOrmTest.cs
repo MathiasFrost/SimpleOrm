@@ -29,7 +29,7 @@ from root r
 	public SimpleOrmTest(ITestOutputHelper testOutputHelper)
 	{
 		_testOutputHelper = testOutputHelper;
-		_db = new SimpleOrmClient<MySqlConnection>(ConnectionString);
+		_db = new SimpleOrmClient<MySqlConnection>(ConnectionString) { LogTo = _testOutputHelper.WriteLine };
 	}
 
 	[Fact]
@@ -87,5 +87,19 @@ from root r
 		_testOutputHelper.WriteLine($"Naked query took {ms}ms");
 
 		Assert.NotEmpty(res);
+	}
+
+	[Fact]
+	public async Task ShouldFetchScalar()
+	{
+		var res = await _db.FirstAsync<string>(@"select Name from root");
+		Assert.NotEmpty(res);
+	}
+
+	[Fact]
+	public async Task ShouldExecuteSuccessfully()
+	{
+		int rows = await _db.ExecuteAsync(@"update root set Name = :name where Id = :id", new {id = 1, name = "Some root"});
+		Assert.True(rows == 1);
 	}
 }
