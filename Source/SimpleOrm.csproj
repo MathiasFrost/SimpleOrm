@@ -6,12 +6,17 @@
         <Nullable>enable</Nullable>
         
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <PackageVersion>1.0</PackageVersion>
+        <PackageVersion>0.1</PackageVersion>
         <PackageId>MathiasFrost.NET.SimpleOrm</PackageId>
         <Title>SimpleOrm</Title>
         <Authors>Mathias Løken</Authors>
         <Description>Minimalistic ORM Framework</Description>
         <PackageTags>orm;database</PackageTags>
+        <RepositoryUrl>https://github.com/MathiasFrost/SimpleOrm</RepositoryUrl>
+        <RepositoryType>GitHub</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <Copyright>Mathias Amandus Andvik Løken 2022</Copyright>
+        <PackageReleaseNotes>ALPHA VERSION, DO NOT USE</PackageReleaseNotes>
     </PropertyGroup>
     
     <ItemGroup>
