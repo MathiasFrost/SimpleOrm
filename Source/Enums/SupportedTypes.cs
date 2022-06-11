@@ -1,7 +1,7 @@
 ﻿namespace SimpleOrm.Enums;
 
 /// <summary> </summary>
-internal enum KnownTypes
+internal enum SupportedTypes
 {
 	/// <summary> </summary>
 	Value,

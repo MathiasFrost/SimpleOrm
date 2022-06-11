@@ -1,6 +1,5 @@
 ﻿using System.Collections;
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Data;
+using System.Data.Common;
 using System.Reflection;
 using SimpleOrm.Enums;
 using SimpleOrm.Models;
@@ -9,195 +8,135 @@ namespace SimpleOrm.Helpers;
 
 internal static class SimpleOrmHelper
 {
-	public static List<PropertyHierarchy> BuildHierarchy<T>(this IDataRecord reader, IReadOnlyList<object> columns)
+	public static PropertyHierarchy BuildAndCheckHierarchy<T>(IReadOnlyCollection<DbColumn> dbColumns, ushort maxDepth)
 				where T : new()
 	{
-		Type parentType = typeof(T);
-		List<PropertyHierarchy> properties
-					= parentType.GetProperties().AsEnumerable().BuildPropertyHierarchy(parentType);
-		for (var i = 0; i < reader.FieldCount; i++)
-		{
-			string name = reader.GetName(i);
-			Type actual = columns[i].GetType();
-			PropertyHierarchy? truth = properties.FindFirstNotMapped(name);
-
-			if (truth == null)
-			{
-				throw new Exception($"{name} was not found as a public property of type {parentType.Name}");
-			}
-			if (!actual.IsAssignableFrom(truth.PropertyInfo.PropertyType))
-			{
-				throw new Exception($"{actual.Name} is not assignable from {truth.PropertyInfo.PropertyType.Name}");
-			}
-
-			truth.IsMapped = true;
-			truth.Index = i;
-		}
-		IList<string> errors = properties.CheckHierarchy();
+		var parent = new PropertyHierarchy(typeof(T));
+		parent.Children = parent.Type.GetProperties().BuildHierarchy(parent, dbColumns, maxDepth);
+		IList<string> errors = parent.Children.CheckHierarchy();
 		if (errors.Any())
 		{
 			throw new Exception(String.Join('\n', errors));
 		}
-		return properties;
+		return parent;
 	}
 
-	private static IList<string> CheckHierarchy(this IEnumerable<PropertyHierarchy> properties)
+	private static List<string> CheckHierarchy(this List<PropertyHierarchy> properties)
 	{
 		var res = new List<string>();
-		foreach (PropertyHierarchy property in properties)
+		foreach (PropertyHierarchy prop in properties)
 		{
-			if (property.Children.Any())
+			if (prop.Children.Any())
 			{
-				res.AddRange(property.Children.CheckHierarchy());
+				res.AddRange(prop.Children.CheckHierarchy());
 			}
-			else if (!property.IsMapped)
+			else if (prop.Error != null)
 			{
-				res.Add(
-							$"Type {property.Parent.Name} has public property {property.PropertyInfo.Name} that was not found among the query results");
+				res.Add(prop.Error);
 			}
 		}
 		return res;
 	}
 
-	private static PropertyHierarchy? FindFirstNotMapped(this IEnumerable<PropertyHierarchy> properties, string name)
-	{
-		foreach (PropertyHierarchy property in properties)
-		{
-			if (!property.IsMapped && name == property.GetColumnName())
-			{
-				return property;
-			}
-
-			PropertyHierarchy? found = property.Children.FindFirstNotMapped(name);
-			if (found != null)
-			{
-				return found;
-			}
-		}
-		return null;
-	}
-
-	private static List<PropertyHierarchy> BuildPropertyHierarchy(this IEnumerable<PropertyInfo> propertyInfo,
-	                                                              Type parentType,
-	                                                              ushort depth = 0,
-	                                                              ushort maxDepth = 20)
+	private static List<PropertyHierarchy> BuildHierarchy(this IEnumerable<PropertyInfo> propertyInfo,
+	                                                      PropertyHierarchy parent,
+	                                                      IReadOnlyCollection<DbColumn> dbColumns,
+	                                                      ushort maxDepth,
+	                                                      ushort depth = 0)
 	{
 		var res = new List<PropertyHierarchy>();
 		foreach (PropertyInfo info in propertyInfo)
 		{
-			PropertyHierarchy parent;
-			if (info.PropertyType.IsValueType || info.PropertyType == typeof(string))
+			var item = new PropertyHierarchy(info, parent, dbColumns);
+			PropertyInfo[] props;
+			switch (item.SupportedType)
 			{
-				parent = new PropertyHierarchy(info, parentType, KnownTypes.Value);
-				res.Add(parent);
-			}
-			else if (typeof(IEnumerable).IsAssignableFrom(info.PropertyType))
-			{
-				if (depth == maxDepth)
-				{
-					continue;
-				}
-				parent = new PropertyHierarchy(info, parentType, KnownTypes.Array);
-				res.Add(parent);
-				PropertyInfo[] props = info.PropertyType.GenericTypeArguments.First().GetProperties();
-				parent.Children = props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth);
-			}
-			else if (info.PropertyType.IsClass)
-			{
-				if (depth == maxDepth)
-				{
-					continue;
-				}
-				parent = new PropertyHierarchy(info, parentType, KnownTypes.Class);
-				res.Add(parent);
-				PropertyInfo[] props = info.PropertyType.GetProperties();
-				parent.Children = props.BuildPropertyHierarchy(info.PropertyType, ++depth, maxDepth);
+				case SupportedTypes.Value:
+					res.Add(item);
+					break;
+				case SupportedTypes.Class:
+					if (depth == maxDepth)
+					{
+						continue;
+					}
+					res.Add(item);
+					props = item.Type.GetProperties();
+					item.Children = props.BuildHierarchy(item, dbColumns, ++depth, maxDepth);
+					break;
+				case SupportedTypes.Array:
+					if (depth == maxDepth)
+					{
+						continue;
+					}
+					res.Add(item);
+					props = item.GenericType!.GetProperties();
+					item.Children = props.BuildHierarchy(item, dbColumns, ++depth, maxDepth);
+					break;
+				default: throw new ArgumentOutOfRangeException(nameof(item), "Unexpected");
 			}
 		}
 
 		return res;
 	}
 
-	private static string GetColumnName(this PropertyHierarchy property)
-	{
-		IList<CustomAttributeData> data = property.PropertyInfo.GetCustomAttributesData();
-		foreach (CustomAttributeData attributeData in data)
-		{
-			if (!attributeData.AttributeType.IsAssignableFrom(typeof(ColumnAttribute)))
-			{
-				continue;
-			}
-			var name = attributeData.ConstructorArguments.First().Value?.ToString();
-			if (name != null)
-			{
-				return name;
-			}
-		}
-
-		return property.PropertyInfo.Name;
-	}
-
-	public static void Parse(this object element, object[] row, IEnumerable<PropertyHierarchy> properties)
+	public static void Parse(this object element, object[] row, PropertyHierarchy hierarchy)
 	{
 		if (element == null)
 		{
 			throw new NullReferenceException();
 		}
 
-		foreach (PropertyHierarchy prop in properties)
+		foreach (PropertyHierarchy prop in hierarchy.Children)
 		{
-			switch (prop.KnownTypes)
+			switch (prop.SupportedType)
 			{
-				case KnownTypes.Value:
+				case SupportedTypes.Value:
 					if (!prop.ValueSet)
 					{
-						prop.PropertyInfo.SetValue(element, row[prop.Index]);
+						prop.SetValue(element, row[prop.Index]);
 						prop.ValueSet = true;
 					}
 					break;
-				case KnownTypes.Class:
+				case SupportedTypes.Class:
 					if (!prop.ValueSet)
 					{
 						object @class = prop.GetConstructor().Invoke(Array.Empty<object>());
-						prop.PropertyInfo.SetValue(element, @class);
-						@class.Parse(row, prop.Children);
+						prop.SetValue(element, @class);
+						@class.Parse(row, prop);
 						prop.ValueSet = true;
 					}
 					break;
-				case KnownTypes.Array:
+				case SupportedTypes.Array:
 					object array;
 					if (!prop.ValueSet)
 					{
 						array = prop.GetConstructor().Invoke(Array.Empty<object>());
-						prop.PropertyInfo.SetValue(element, array);
+						prop.SetValue(element, array);
 						prop.ValueSet = true;
 					}
 					else
 					{
-						array = prop.PropertyInfo.GetValue(element)!;
+						array = prop.GetValue(element)!;
 					}
 					object item = prop.GetGenericConstructor().Invoke(Array.Empty<object>());
 					((IList)array).Add(item);
-					item.Parse(row, prop.Children);
+					item.Parse(row, prop);
 					break;
 				default: throw new ArgumentOutOfRangeException(nameof(prop), "Unexpected");
 			}
 		}
 	}
 
-	public static T? GetByKeys<T>(this IEnumerable<T> element, List<PropertyHierarchy> properties, object[] columns)
+	public static T? GetByKeys<T>(this List<T> element, PropertyHierarchy hierarchy, object[] columns)
 	{
-		List<PropertyHierarchy> keys = properties.Where(p => p.IsKey).ToList();
-		if (!keys.Any())
-		{
-			keys = properties;
-		}
+		List<PropertyHierarchy> keys = hierarchy.Children.Where(p => p.IsKey).ToList();
 		foreach (T el in element)
 		{
 			int matches = (from key in keys
-						let value = key.PropertyInfo.GetValue(el)
+						let value = key.GetValue(el)
 						where value != null && value.Equals(columns[key.Index])
 						select key).Count();
+
 			if (matches == keys.Count)
 			{
 				return el;
@@ -243,11 +182,11 @@ internal static class SimpleOrmHelper
 					{
 						valStr = val.ToString();
 					}
-					else if (prop.PropertyType.IsAssignableFrom(typeof(string)))
+					else if (typeof(string).IsAssignableFrom(prop.PropertyType))
 					{
 						valStr = ((string)val).EscapeSingleQuotes();
 					}
-					else if (prop.PropertyType.IsAssignableFrom(typeof(DateTime)))
+					else if (typeof(DateTime).IsAssignableFrom(prop.PropertyType))
 					{
 						valStr = ((DateTime)val).ToString("yyyy-MM-dd HH:mm:ss").EscapeSingleQuotes();
 					}

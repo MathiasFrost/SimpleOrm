@@ -19,7 +19,7 @@ from root r
          join child c on r.Id = c.RootId
 ";
 
-	private const string NoResults = Sql + "\nwhere r.Id = -1";
+	private const string NoResults = Sql + "where r.Id = -1";
 
 	private readonly SimpleOrmClient<MySqlConnection> _db;
 
@@ -34,7 +34,7 @@ from root r
 	[Fact]
 	public async Task Should_FetchFirstOrDefault()
 	{
-		Root res = await _db.FirstOrDefaultAsync<Root>(Sql, new { }).ConfigureAwait(false);
+		Root? res = await _db.FirstOrDefaultAsync<Root>(Sql, new { }).ConfigureAwait(false);
 		Assert.NotNull(res);
 	}
 

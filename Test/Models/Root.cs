@@ -1,24 +1,24 @@
 ﻿using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using JetBrains.Annotations;
 
 namespace SimpleOrm.Test.Models;
 
-[PublicAPI]
+[PublicAPI, Table("root")]
 public class Root
 {
-	[Key] public ulong Id { get; init; }
+	public ulong Id { get; init; }
 
 	public string Name { get; init; } = null!;
 
 	public ulong SiblingId { get; init; }
-
+	
 	public Sibling? Sibling { get; init; }
 
 	public List<Child> Children { get; init; } = new();
 }
 
-[PublicAPI]
+[PublicAPI, Table("sibling")]
 public class Sibling
 {
 	public ulong Id { get; init; }
@@ -26,7 +26,7 @@ public class Sibling
 	public string Name { get; init; } = null!;
 }
 
-[PublicAPI]
+[PublicAPI, Table("child")]
 public class Child
 {
 	public ulong Id { get; init; }

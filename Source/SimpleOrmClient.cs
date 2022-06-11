@@ -1,4 +1,5 @@
-﻿using System.Data.Common;
+﻿using System.Collections.ObjectModel;
+using System.Data.Common;
 using JetBrains.Annotations;
 using SimpleOrm.Helpers;
 using SimpleOrm.Models;
@@ -12,6 +13,9 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 {
 	/// <summary>Stored connection string</summary>
 	private readonly string _connectionString;
+
+	/// <summary> Set this higher if needed </summary>
+	public ushort MaxDepth = 20;
 
 	/// <summary>Create a new Simple ORM client</summary>
 	/// <param name="connectionString">
@@ -31,11 +35,8 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 
 	/// <inheritdoc cref="ToList{T}" />
 	public async Task<List<T>> ToListAsync<T>(string sql, object @params, CancellationToken token = default)
-				where T : new()
-	{
-		(List<T> res, bool _) = await Query<T>(sql.Parameterize(@params), false, token).ConfigureAwait(false);
-		return res;
-	}
+				where T : new() =>
+				await Query<T>(sql.Parameterize(@params), false, token).ConfigureAwait(false);
 
 	/// <summary> Return first fully populated object of type </summary>
 	/// <param name="sql">SQL code to execute against database</param>
@@ -49,12 +50,12 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 	public async Task<T?> FirstOrDefaultAsync<T>(string sql, object @params, CancellationToken token = default)
 				where T : new()
 	{
-		(List<T> res, bool first) = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
-		return first ? default(T) : res.First();
+		List<T> res = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
+		return res.Any() ? res.First() : default(T);
 	}
 
 	/// <inheritdoc cref="ToList{T}" />
-	private async Task<(List<T>, bool)> Query<T>(string sql, bool breakOnFirst, CancellationToken token = default)
+	private async Task<List<T>> Query<T>(string sql, bool breakOnFirst, CancellationToken token = default)
 				where T : new()
 	{
 		await using var connection = new TDbConnection();
@@ -67,24 +68,33 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		}
 
 		await command.Connection.OpenAsync(token).ConfigureAwait(false);
-		var res = new List<T> { new() };
-		var first = true;
+		var res = new List<T>();
+		var any = false;
 		object[] prev = Array.Empty<object>();
-		var properties = new List<PropertyHierarchy>();
 
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+		ReadOnlyCollection<DbColumn> columnInfo = await reader.GetColumnSchemaAsync(token);
+		PropertyHierarchy properties = SimpleOrmHelper.BuildAndCheckHierarchy<T>(columnInfo, MaxDepth);
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
 		{
 			var row = new object[reader.FieldCount];
 			reader.GetValues(row);
-			properties.ForEach(p => p.Reset(prev, row));
-			if (first)
+			if (any)
 			{
-				properties = reader.BuildHierarchy<T>(row);
+				properties.Reset(prev, row);
 			}
 
+			T? item;
 			// First iteration GetByKeys will always be null
-			T? item = first ? res.First() : res.GetByKeys(properties, row);
+			if (!any)
+			{
+				item = new T();
+				res.Add(item);
+			}
+			else
+			{
+				item = res.GetByKeys(properties, row);
+			}
 			if (item == null)
 			{
 				// We only want first full result here
@@ -97,14 +107,14 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 				item = new T();
 				res.Add(item);
 
-				properties.ForEach(p => p.Reset());
+				properties.Reset();
 			}
 			item.Parse(row, properties);
 			prev = row;
-			first = false;
+			any = true;
 		}
 
 		await reader.CloseAsync().ConfigureAwait(false);
-		return (res, first);
+		return res;
 	}
 }
