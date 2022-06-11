@@ -14,6 +14,9 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 	/// <summary>Stored connection string</summary>
 	private readonly string _connectionString;
 
+	/// <summary>Log to this</summary>
+	public Action<string>? LogTo;
+
 	/// <summary> How many Class/Array properties to map. Set this higher if needed </summary>
 	public ushort MaxDepth = 20;
 
@@ -40,7 +43,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 	/// <inheritdoc cref="ToList{T}(string,object)" />
 	public async Task<List<T>> ToListAsync<T>(string sql, object @params, CancellationToken token = default)
 				where T : new() =>
-				await Query<T>(sql.Parameterize(@params), false, token).ConfigureAwait(false);
+				await Query<T>(sql.Parameterize(@params, LogTo), false, token).ConfigureAwait(false);
 
 	/// <inheritdoc cref="ToList{T}(string,object)" />
 	public async Task<List<T>> ToListAsync<T>(string sql, CancellationToken token = default) where T : new() =>
@@ -62,7 +65,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 	public async Task<T?> FirstOrDefaultAsync<T>(string sql, object @params, CancellationToken token = default)
 				where T : new()
 	{
-		List<T> res = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
+		List<T> res = await Query<T>(sql.Parameterize(@params, LogTo), true, token).ConfigureAwait(false);
 		return res.Any() ? res.First() : default(T);
 	}
 
@@ -86,7 +89,7 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 	/// <inheritdoc cref="First{T}(string, object)" />
 	public async Task<T> FirstAsync<T>(string sql, object @params, CancellationToken token = default) where T : new()
 	{
-		List<T> res = await Query<T>(sql.Parameterize(@params), true, token).ConfigureAwait(false);
+		List<T> res = await Query<T>(sql.Parameterize(@params, LogTo), true, token).ConfigureAwait(false);
 		return res.Any()
 					? res.First()
 					: throw new NullReferenceException("Query did not result in a fully populated object");

@@ -104,5 +104,6 @@ rows with the same keys[^2] represents another element for `Root.Children`, resu
 ]
 ```
 
-[^1]: _(Case sensitive. Schema is by default not specified and Table name is the name of the class or the one specified in `[Table("Name")]`. Column is the name of the property or the one specified in `[Column("Name")]`)_
+[^1]: _(Case sensitive. Schema is by default not specified and Table name is the name of the class or the one specified
+in `[Table("Name")]`. Column is the name of the property or the one specified in `[Column("Name")]`)_
 [^2]: _(Keys are fetched from DB info. If there are no keys, it will treat all base columns as keys)_

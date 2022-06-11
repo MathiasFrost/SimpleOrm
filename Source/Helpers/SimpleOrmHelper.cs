@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using System.Reflection;
 using SimpleOrm.Enums;
@@ -12,13 +13,22 @@ internal static class SimpleOrmHelper
 				where T : new()
 	{
 		var parent = new PropertyHierarchy(typeof(T));
-		parent.Children = parent.Type.GetProperties().BuildHierarchy(parent, dbColumns, maxDepth);
+		parent.Children = parent.Type.GetRelevantProperties().BuildHierarchy(parent, dbColumns, maxDepth);
 		IList<string> errors = parent.Children.CheckHierarchy();
 		if (errors.Any())
 		{
 			throw new Exception(String.Join('\n', errors));
 		}
 		return parent;
+	}
+
+	private static IEnumerable<PropertyInfo> GetRelevantProperties(this Type type)
+	{
+		return type.GetProperties()
+					.Where(info =>
+								info.SetMethod != null
+								&& !info.CustomAttributes.Any(data =>
+											typeof(NotMappedAttribute).IsAssignableFrom(data.AttributeType)));
 	}
 
 	private static List<string> CheckHierarchy(this List<PropertyHierarchy> properties)
@@ -30,10 +40,10 @@ internal static class SimpleOrmHelper
 			{
 				res.AddRange(prop.Children.CheckHierarchy());
 			}
-			else if (prop.DbColumn == null && prop.Parent?.IsNullable == false)
+			else if (prop.IsFaulty)
 			{
-				string? parentName = prop.Parent?.Type.Name;
-				string name = prop.Type.Name;
+				string? parentName = prop.ParentName;
+				string? name = prop.PropertyInfo?.Name;
 				string err = $"Type {parentName} has not nullable public property {name} not found among query results";
 				res.Add(err);
 			}
@@ -41,17 +51,17 @@ internal static class SimpleOrmHelper
 		return res;
 	}
 
-	private static List<PropertyHierarchy> BuildHierarchy(this IEnumerable<PropertyInfo> propertyInfo,
+	private static List<PropertyHierarchy> BuildHierarchy(this IEnumerable<PropertyInfo> propertyInfos,
 	                                                      PropertyHierarchy parent,
 	                                                      IReadOnlyCollection<DbColumn> dbColumns,
 	                                                      ushort maxDepth,
 	                                                      ushort depth = 0)
 	{
 		var res = new List<PropertyHierarchy>();
-		foreach (PropertyInfo info in propertyInfo)
+		foreach (PropertyInfo info in propertyInfos)
 		{
 			var item = new PropertyHierarchy(info, parent, dbColumns);
-			PropertyInfo[] props;
+			IEnumerable<PropertyInfo> props;
 			switch (item.SupportedType)
 			{
 				case SupportedTypes.Value:
@@ -63,8 +73,8 @@ internal static class SimpleOrmHelper
 						continue;
 					}
 					res.Add(item);
-					props = item.Type.GetProperties();
-					item.Children = props.BuildHierarchy(item, dbColumns, ++depth, maxDepth);
+					props = item.Type.GetRelevantProperties();
+					item.Children = props.BuildHierarchy(item, dbColumns, maxDepth, ++depth);
 					break;
 				case SupportedTypes.Array:
 					if (depth == maxDepth)
@@ -72,8 +82,8 @@ internal static class SimpleOrmHelper
 						continue;
 					}
 					res.Add(item);
-					props = item.GenericType!.GetProperties();
-					item.Children = props.BuildHierarchy(item, dbColumns, ++depth, maxDepth);
+					props = item.GenericType!.GetRelevantProperties();
+					item.Children = props.BuildHierarchy(item, dbColumns, maxDepth, ++depth);
 					break;
 				default: throw new ArgumentOutOfRangeException(nameof(item), "Unexpected");
 			}
@@ -94,62 +104,64 @@ internal static class SimpleOrmHelper
 			switch (prop.SupportedType)
 			{
 				case SupportedTypes.Value:
-					if (!prop.ValueSet)
+					if (prop.ValueSet == ValueSetResult.NotSet)
 					{
 						prop.SetValue(element, row);
-						prop.ValueSet = true;
 					}
 					break;
 				case SupportedTypes.Class:
-					if (!prop.ValueSet)
+					if (prop.ValueSet == ValueSetResult.NotSet)
 					{
-						object @class = prop.GetConstructor().Invoke(Array.Empty<object>());
+						object @class = prop.Constructor!.Invoke(Array.Empty<object>());
 						prop.SetValue(element, @class);
 						@class.Parse(row, prop);
-						prop.ValueSet = true;
 					}
 					break;
 				case SupportedTypes.Array:
 					object array;
-					if (!prop.ValueSet)
+					if (prop.ValueSet == ValueSetResult.NotSet)
 					{
-						array = prop.GetConstructor().Invoke(Array.Empty<object>());
+						array = prop.ListConstructor!.Invoke(Array.Empty<object>());
 						prop.SetValue(element, array);
-						prop.ValueSet = true;
 					}
 					else
 					{
 						array = prop.GetValue(element)!;
 					}
-					object item = prop.GetGenericConstructor().Invoke(Array.Empty<object>());
-					((IList)array).Add(item);
+					object item = prop.Constructor!.Invoke(Array.Empty<object>());
 					item.Parse(row, prop);
+					// We don't want to add array elements that did not have their value set
+					if (prop.ArrayChildrenValid())
+					{
+						((IList)array).Add(item);
+					}
 					break;
 				default: throw new ArgumentOutOfRangeException(nameof(prop), "Unexpected");
 			}
 		}
 	}
 
-	public static T? GetByKeys<T>(this List<T> element, PropertyHierarchy hierarchy, object[] columns)
+	public static T? GetByKeys<T>(this IEnumerable<T> element, PropertyHierarchy hierarchy, object[] columns)
 	{
 		List<PropertyHierarchy> keys = hierarchy.Children.Where(p => p.IsKey).ToList();
-		foreach (T el in element)
-		{
-			int matches = (from key in keys
-						let value = key.GetValue(el)
-						where value != null && value.Equals(columns[key.Index])
-						select key).Count();
+		IEnumerable<T> elements = from el in element
+					let keyValues = from key in keys
+								let value = key.GetValue(el)
+								where value != null && value.Equals(columns[key.Index])
+								select key
+					let matches = keyValues.Count()
+					where matches == keys.Count
+					select el;
 
-			if (matches == keys.Count)
-			{
-				return el;
-			}
+		foreach (T el in elements)
+		{
+			return el;
 		}
 
 		return default(T?);
 	}
 
-	public static string Parameterize(this string sql, object @params)
+	public static string Parameterize(this string sql, object @params, Action<string>? log = null)
 	{
 		Dictionary<string, PropertyInfo> props = @params.GetType().GetProperties().ToDictionary(info => info.Name);
 		var res = "";
@@ -211,6 +223,7 @@ internal static class SimpleOrmHelper
 			parser.Update(c);
 		}
 
+		log?.Invoke("Executing query: \n" + res);
 		return res;
 	}
 

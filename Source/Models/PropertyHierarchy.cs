@@ -8,13 +8,11 @@ namespace SimpleOrm.Models;
 
 internal class PropertyHierarchy
 {
-	public readonly DbColumn? DbColumn;
+	private readonly DbColumn? _dbColumn;
 
-	public readonly bool IsNullable;
+	private readonly bool _isNullable;
 
-	public readonly PropertyHierarchy? Parent;
-
-	private readonly PropertyInfo? _propertyInfo;
+	private readonly PropertyHierarchy? _parent;
 
 	private readonly string? _schema;
 
@@ -22,60 +20,81 @@ internal class PropertyHierarchy
 
 	public readonly Type? GenericType;
 
-	public readonly SupportedTypes SupportedType;
+	public readonly PropertyInfo? PropertyInfo;
 
 	public readonly Type Type;
 
+	public readonly SupportedTypes SupportedType;
+
 	public List<PropertyHierarchy> Children = new();
 
-	public bool ValueSet;
+	public ValueSetResult ValueSet = ValueSetResult.NotSet;
+
+	public readonly ConstructorInfo? Constructor;
+
+	public readonly ConstructorInfo? ListConstructor;
 
 	/// <summary>Constructor for root</summary>
 	public PropertyHierarchy(Type type)
 	{
 		Type = type;
 		SupportedType = GetSupportedType(type);
-		IsNullable = CheckIfNullable(type);
+		_isNullable = CheckIfNullable(type);
 		(_schema, _table) = GetTableAndSchemaName(type);
+		Constructor = Type.GetConstructor(Array.Empty<Type>());
 	}
 
 	/// <summary>Constructor for props</summary>
 	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, IEnumerable<DbColumn> dbColumns)
 	{
-		Parent = parent;
-		_propertyInfo = info;
+		_parent = parent;
+		PropertyInfo = info;
 		Type = info.PropertyType;
-		IsNullable = CheckIfNullable(Type);
+		_isNullable = CheckIfNullable(Type);
 		SupportedType = GetSupportedType(Type);
 		if (SupportedType == SupportedTypes.Array)
 		{
 			GenericType = info.PropertyType.GenericTypeArguments.First();
 			(_schema, _table) = GetTableAndSchemaName(GenericType);
+			Constructor = GenericType.GetConstructor(Array.Empty<Type>());
+			ListConstructor = GetListConstructor(GenericType);
 		}
 		else
 		{
 			(_schema, _table) = GetTableAndSchemaName(Type);
+			Constructor = Type.GetConstructor(Array.Empty<Type>());
 		}
 
 		string column = GetColumnName(info);
-		DbColumn = dbColumns.FirstOrDefault(dbColumn =>
+		_dbColumn = dbColumns.FirstOrDefault(dbColumn =>
 					(parent._schema == null || dbColumn.BaseSchemaName == parent._schema)
 					&& dbColumn.BaseTableName == parent._table
 					&& dbColumn.ColumnName == column);
 	}
 
+	public bool IsFaulty => _dbColumn == null && !_isNullable;
+
+	public string? ParentName => _parent == null ? Type.Name : _parent.PropertyInfo?.Name;
+
 	public bool IsKey =>
-				DbColumn != null && (DbColumn?.IsKey ?? throw new Exception("DbColumn did not have IsKey set"));
+				_dbColumn != null && (_dbColumn?.IsKey ?? throw new Exception("DbColumn did not have IsKey set"));
 
-	public int Index => DbColumn?.ColumnOrdinal ?? throw new Exception("DbColumn did not have ColumnOrdinal set");
+	public int Index => _dbColumn?.ColumnOrdinal ?? throw new Exception("DbColumn did not have ColumnOrdinal set");
 
-	private static bool CheckIfNullable(Type type)
+	private static bool CheckIfNullable(Type type, PropertyHierarchy? parent = null)
 	{
+		// Array is always nullable, but we never set arrays to be null, but empty array instead
+		if (parent is { _isNullable: true } && parent.SupportedType != SupportedTypes.Array)
+		{
+			return true;
+		}
+
 		bool isNullable = Nullable.GetUnderlyingType(type) != null;
 		if (isNullable)
 		{
 			return isNullable;
 		}
+
 		const string nullableAttribute = "System.Runtime.CompilerServices.NullableAttribute";
 		isNullable = type.CustomAttributes.Any(data => data.AttributeType.FullName == nullableAttribute);
 		return isNullable;
@@ -100,10 +119,9 @@ internal class PropertyHierarchy
 
 	private static (string?, string) GetTableAndSchemaName(MemberInfo type)
 	{
-		IList<CustomAttributeData> data = type.GetCustomAttributesData();
 		string tableName = type.Name;
 		string? schemaName = null;
-		foreach (CustomAttributeData attributeData in data)
+		foreach (CustomAttributeData attributeData in type.CustomAttributes)
 		{
 			if (!typeof(TableAttribute).IsAssignableFrom(attributeData.AttributeType))
 			{
@@ -124,22 +142,13 @@ internal class PropertyHierarchy
 		return (schemaName, tableName);
 	}
 
-	public ConstructorInfo GetConstructor()
+	private static ConstructorInfo GetListConstructor(Type type)
 	{
-		ConstructorInfo? constructor = Type.GetConstructor(Array.Empty<Type>());
+		Type listType = typeof(List<>).MakeGenericType(type);
+		ConstructorInfo? constructor = listType.GetConstructor(Array.Empty<Type>());
 		if (constructor == null)
 		{
-			throw new Exception($"Class property {Type.Name} did not have a parameterless constructor");
-		}
-		return constructor;
-	}
-
-	public ConstructorInfo GetGenericConstructor()
-	{
-		ConstructorInfo? constructor = GenericType?.GetConstructor(Array.Empty<Type>());
-		if (constructor == null)
-		{
-			throw new Exception($"Property {GenericType?.Name} did not have a parameterless constructor");
+			throw new Exception("Somehow could not get List constructor");
 		}
 		return constructor;
 	}
@@ -151,7 +160,7 @@ internal class PropertyHierarchy
 		{
 			case SupportedTypes.Value when IsNewValue(prev, curr):
 			case SupportedTypes.Class when Children.All(c => c.IsNewValue(prev, curr)):
-				ValueSet = false;
+				ValueSet = ValueSetResult.NotSet;
 				break;
 		}
 		foreach (PropertyHierarchy child in Children)
@@ -162,45 +171,61 @@ internal class PropertyHierarchy
 
 	public void Reset()
 	{
-		ValueSet = false;
+		ValueSet = ValueSetResult.NotSet;
 		foreach (PropertyHierarchy child in Children)
 		{
 			child.Reset();
 		}
 	}
 
+	public bool ArrayChildrenValid()
+	{
+		// If a property of an array prop is not nullable and was set to null, the element is not valid
+		return !Children.Any(hierarchy => !hierarchy._isNullable && hierarchy.ValueSet == ValueSetResult.SetNull);
+	}
+
 	public void SetValue(object item, object[] columns)
 	{
-		if (DbColumn == null)
+		if (_dbColumn == null)
 		{
-			if (!IsNullable && Parent?.IsNullable != true)
+			if (!_isNullable && _parent?._isNullable != true)
 			{
-				throw new Exception($"{_propertyInfo!.Name} is not nullable but query returned null");
+				throw new Exception($"{PropertyInfo!.Name} is not nullable but query returned null");
 			}
 		}
 		else
 		{
 			object value = columns[Index];
-			_propertyInfo!.SetValue(item, value is DBNull ? null : columns[Index]);
+			if (value is DBNull)
+			{
+				PropertyInfo!.SetValue(item, null);
+				ValueSet = ValueSetResult.SetNull;
+			}
+			else
+			{
+				PropertyInfo!.SetValue(item, value);
+				ValueSet = ValueSetResult.Set;
+			}
 		}
 	}
 
 	public void SetValue(object item, object value)
 	{
-		if (Children.All(hierarchy => hierarchy.DbColumn == null))
+		if (Children.All(hierarchy => hierarchy._dbColumn == null))
 		{
-			if (!IsNullable)
+			if (!_isNullable)
 			{
-				throw new Exception($"{_propertyInfo!.Name} is not nullable but query returned null");
+				throw new Exception($"{PropertyInfo!.Name} is not nullable but query returned null");
 			}
 		}
 		else
 		{
-			_propertyInfo!.SetValue(item, value);
+			PropertyInfo!.SetValue(item, value);
+			ValueSet = ValueSetResult.Set;
 		}
 	}
 
-	public object? GetValue(object item) => _propertyInfo?.GetValue(item);
+	public object? GetValue(object item) => PropertyInfo?.GetValue(item);
 
 	private bool IsNewValue(IReadOnlyList<object> prev, IReadOnlyList<object> curr)
 	{
@@ -214,8 +239,7 @@ internal class PropertyHierarchy
 
 	private static string GetColumnName(MemberInfo propertyInfo)
 	{
-		IList<CustomAttributeData> data = propertyInfo.GetCustomAttributesData();
-		foreach (CustomAttributeData attributeData in data)
+		foreach (CustomAttributeData attributeData in propertyInfo.CustomAttributes)
 		{
 			if (!typeof(ColumnAttribute).IsAssignableFrom(attributeData.AttributeType))
 			{

@@ -16,7 +16,15 @@ public class Root
 
 	public Sibling? Sibling { get; init; }
 
-	public List<Child> Children { get; init; } = new();
+	public IList<Child> Children { get; init; } = new List<Child>();
+
+	public string Test1 { get; } = "test";
+
+	public string Test2 => "test";
+
+	private string Test3 { get; set; } = "test";
+
+	[NotMapped] public string Test4 { get; set; } = "test";
 }
 
 [PublicAPI, Table("sibling")]
