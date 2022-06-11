@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using JetBrains.Annotations;
 
@@ -34,4 +35,16 @@ public class Child
 	public ulong RootId { get; init; }
 
 	public string Name { get; init; } = null!;
+
+	public List<Grandchild> Grandchildren { get; init; } = new();
+}
+
+[PublicAPI, Table("grandchild")]
+public class Grandchild
+{
+	public ulong Id { get; init; }
+
+	public ulong ChildId { get; init; }
+
+	public DateTime? Date { get; init; }
 }

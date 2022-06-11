@@ -180,7 +180,8 @@ internal class PropertyHierarchy
 		}
 		else
 		{
-			_propertyInfo!.SetValue(item, columns[Index]);
+			object value = columns[Index];
+			_propertyInfo!.SetValue(item, value is DBNull ? null : columns[Index]);
 		}
 	}
 

@@ -17,6 +17,7 @@ select *
 from root r
         join sibling s on s.Id = r.SiblingId
         join child c on r.Id = c.RootId
+        join grandchild gc on c.Id = gc.ChildId
 ";
 
 	private const string NoResults = Sql + "where r.Id = -1";
