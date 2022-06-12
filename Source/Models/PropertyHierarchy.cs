@@ -46,7 +46,7 @@ internal class PropertyHierarchy
 
 	/// <summary>Constructor for props</summary>
 	/// <exception cref="ArgumentOutOfRangeException"></exception>
-	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, List<ColumnUse> dbColumns)
+	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, IEnumerable<ColumnUse> columnUses)
 	{
 		_parent = parent;
 		PropertyInfo = info;
@@ -70,7 +70,7 @@ internal class PropertyHierarchy
 		}
 
 		ColumnName = GetColumnName(info);
-		ColumnUse? column = dbColumns.FirstOrDefault(column => column.DbColumn.ColumnName == ColumnName
+		ColumnUse? column = columnUses.FirstOrDefault(column => column.DbColumn.ColumnName == ColumnName
 					&& ( // Safe find based on fully qualified name
 								(!column.Unsafe
 											&& (parent._schema == null

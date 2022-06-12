@@ -121,9 +121,11 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 		object[] prev = Array.Empty<object>();
 
 		await using DbDataReader reader = await command.ExecuteReaderAsync(token).ConfigureAwait(false);
+		
 		ReadOnlyCollection<DbColumn> columnInfo = await reader.GetColumnSchemaAsync(token);
 		List<ColumnUse> columnUses = columnInfo.Select(column => new ColumnUse(column, LogTo)).ToList();
 		PropertyHierarchy hierarchy = SimpleOrmHelper.BuildAndCheckHierarchy<T>(columnUses, MaxDepth);
+		
 		while (await reader.ReadAsync(token).ConfigureAwait(false))
 		{
 			var row = new object[reader.FieldCount];

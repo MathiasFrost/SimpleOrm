@@ -8,10 +8,10 @@ namespace SimpleOrm.Helpers;
 
 internal static class SimpleOrmHelper
 {
-	public static PropertyHierarchy BuildAndCheckHierarchy<T>(List<ColumnUse> dbColumns, ushort maxDepth)
+	public static PropertyHierarchy BuildAndCheckHierarchy<T>(IList<ColumnUse> columnUses, ushort maxDepth)
 	{
 		var parent = new PropertyHierarchy(typeof(T));
-		parent.Children = parent.Type.GetRelevantProperties().BuildHierarchy(parent, dbColumns, maxDepth);
+		parent.Children = parent.Type.GetRelevantProperties().BuildHierarchy(parent, columnUses, maxDepth);
 		IList<string> errors = parent.Children.CheckHierarchy();
 		if (errors.Any())
 		{
@@ -51,14 +51,14 @@ internal static class SimpleOrmHelper
 
 	private static List<PropertyHierarchy> BuildHierarchy(this IEnumerable<PropertyInfo> propertyInfos,
 	                                                      PropertyHierarchy parent,
-	                                                      List<ColumnUse> dbColumns,
+	                                                      IList<ColumnUse> columnUses,
 	                                                      ushort maxDepth,
 	                                                      ushort depth = 0)
 	{
 		var res = new List<PropertyHierarchy>();
 		foreach (PropertyInfo info in propertyInfos)
 		{
-			var item = new PropertyHierarchy(info, parent, dbColumns);
+			var item = new PropertyHierarchy(info, parent, columnUses);
 			IEnumerable<PropertyInfo> props;
 			switch (item.SupportedType)
 			{
@@ -72,7 +72,7 @@ internal static class SimpleOrmHelper
 					}
 					res.Add(item);
 					props = item.Type.GetRelevantProperties();
-					item.Children = props.BuildHierarchy(item, dbColumns, maxDepth, ++depth);
+					item.Children = props.BuildHierarchy(item, columnUses, maxDepth, ++depth);
 					break;
 				case SupportedTypes.Array:
 					if (depth == maxDepth)
@@ -81,7 +81,7 @@ internal static class SimpleOrmHelper
 					}
 					res.Add(item);
 					props = item.GenericType!.GetRelevantProperties();
-					item.Children = props.BuildHierarchy(item, dbColumns, maxDepth, ++depth);
+					item.Children = props.BuildHierarchy(item, columnUses, maxDepth, ++depth);
 					break;
 				default: throw new ArgumentOutOfRangeException(nameof(item), "Unexpected");
 			}
