@@ -1,6 +1,5 @@
 ﻿using System.Collections;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Data.Common;
 using System.Reflection;
 using SimpleOrm.Enums;
 using SimpleOrm.Models;
@@ -9,7 +8,7 @@ namespace SimpleOrm.Helpers;
 
 internal static class SimpleOrmHelper
 {
-	public static PropertyHierarchy BuildAndCheckHierarchy<T>(IReadOnlyCollection<DbColumn> dbColumns, ushort maxDepth)
+	public static PropertyHierarchy BuildAndCheckHierarchy<T>(List<ColumnUse> dbColumns, ushort maxDepth)
 	{
 		var parent = new PropertyHierarchy(typeof(T));
 		parent.Children = parent.Type.GetRelevantProperties().BuildHierarchy(parent, dbColumns, maxDepth);
@@ -52,7 +51,7 @@ internal static class SimpleOrmHelper
 
 	private static List<PropertyHierarchy> BuildHierarchy(this IEnumerable<PropertyInfo> propertyInfos,
 	                                                      PropertyHierarchy parent,
-	                                                      IReadOnlyCollection<DbColumn> dbColumns,
+	                                                      List<ColumnUse> dbColumns,
 	                                                      ushort maxDepth,
 	                                                      ushort depth = 0)
 	{

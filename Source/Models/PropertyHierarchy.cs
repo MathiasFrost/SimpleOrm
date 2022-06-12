@@ -45,31 +45,45 @@ internal class PropertyHierarchy
 	}
 
 	/// <summary>Constructor for props</summary>
-	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, IEnumerable<DbColumn> dbColumns)
+	/// <exception cref="ArgumentOutOfRangeException"></exception>
+	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, List<ColumnUse> dbColumns)
 	{
 		_parent = parent;
 		PropertyInfo = info;
 		Type = info.PropertyType;
 		SupportedType = GetSupportedType(Type);
 		_isNullable = CheckIfNullable(info, parent);
-		if (SupportedType == SupportedTypes.Array)
+		switch (SupportedType)
 		{
-			GenericType = info.PropertyType.GenericTypeArguments.First();
-			(_schema, _table) = GetTableAndSchemaName(GenericType);
-			Constructor = GenericType.GetConstructor(Array.Empty<Type>());
-			ListConstructor = GetListConstructor(GenericType);
-		}
-		else
-		{
-			(_schema, _table) = GetTableAndSchemaName(Type);
-			Constructor = Type.GetConstructor(Array.Empty<Type>());
+			case SupportedTypes.Array:
+				GenericType = info.PropertyType.GenericTypeArguments.First();
+				(_schema, _table) = GetTableAndSchemaName(GenericType);
+				Constructor = GenericType.GetConstructor(Array.Empty<Type>());
+				ListConstructor = GetListConstructor(GenericType);
+				break;
+			case SupportedTypes.Class:
+				(_schema, _table) = GetTableAndSchemaName(Type);
+				Constructor = Type.GetConstructor(Array.Empty<Type>());
+				break;
+			case SupportedTypes.Value: break;
+			default: throw new ArgumentOutOfRangeException(nameof(SupportedType), "Unexpected");
 		}
 
 		ColumnName = GetColumnName(info);
-		_dbColumn = dbColumns.FirstOrDefault(dbColumn =>
-					(parent._schema == null || dbColumn.BaseSchemaName == parent._schema)
-					&& dbColumn.BaseTableName == parent._table
-					&& dbColumn.ColumnName == ColumnName);
+		ColumnUse? column = dbColumns.FirstOrDefault(column => column.DbColumn.ColumnName == ColumnName
+					&& ( // Safe find based on fully qualified name
+								(!column.Unsafe
+											&& (parent._schema == null
+														|| column.DbColumn.BaseSchemaName == parent._schema)
+											&& column.DbColumn.BaseTableName == parent._table)
+								// Unsafe find based on position (first not mapped)
+								|| (column.Unsafe && !column.Mapped)));
+		if (column == null)
+		{
+			return;
+		}
+		column.Mapped = true;
+		_dbColumn = column.DbColumn;
 	}
 
 	public bool ColumnNotFound => _dbColumn == null && !_isNullable;
@@ -85,7 +99,7 @@ internal class PropertyHierarchy
 				+ (_parent?._table == null
 							? ""
 							: _parent._table.Contains('.')
-										? $"[{_table}]"
+										? $"[{_parent._table}]"
 										: _parent._table);
 
 	public string? ColumnName { get; }
@@ -205,12 +219,12 @@ internal class PropertyHierarchy
 		{
 			return false;
 		}
-		
+
 		// If a property of an array prop is not nullable and was set to null, the element is not valid
 		IEnumerable<string> errors = from child in Children
 					where !child._isNullable && child.ValueSet == ValueSetResult.SetNull
 					select $"Entity '{child.ParentName}' has not nullable public property '{child.PropertyInfo?.Name}'"
-								+ $", but value from column '{child.ColumnName}' from table '{child.TableName}' was null";
+								+ $", but value from column '{child.ColumnName}' in table '{child.TableName}' was null";
 
 		foreach (string err in errors)
 		{
