@@ -23,8 +23,6 @@ public class Root
 	public string Test2 => "test";
 
 	private string Test3 { get; set; } = "test";
-
-	[NotMapped] public string Test4 { get; set; } = "test";
 }
 
 [PublicAPI, Table("sibling")]

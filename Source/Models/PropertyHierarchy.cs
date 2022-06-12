@@ -12,7 +12,7 @@ internal class PropertyHierarchy
 
 	private readonly bool _isNullable;
 
-	public readonly PropertyHierarchy? Parent;
+	private readonly PropertyHierarchy? _parent;
 
 	private readonly string? _schema;
 
@@ -38,8 +38,8 @@ internal class PropertyHierarchy
 	public PropertyHierarchy(Type type)
 	{
 		Type = type;
+		_isNullable = false;
 		SupportedType = GetSupportedType(type);
-		_isNullable = CheckIfNullable(type);
 		(_schema, _table) = GetTableAndSchemaName(type);
 		Constructor = Type.GetConstructor(Array.Empty<Type>());
 	}
@@ -47,11 +47,11 @@ internal class PropertyHierarchy
 	/// <summary>Constructor for props</summary>
 	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, IEnumerable<DbColumn> dbColumns)
 	{
-		Parent = parent;
+		_parent = parent;
 		PropertyInfo = info;
 		Type = info.PropertyType;
-		_isNullable = CheckIfNullable(Type);
 		SupportedType = GetSupportedType(Type);
+		_isNullable = CheckIfNullable(info, parent);
 		if (SupportedType == SupportedTypes.Array)
 		{
 			GenericType = info.PropertyType.GenericTypeArguments.First();
@@ -65,38 +65,52 @@ internal class PropertyHierarchy
 			Constructor = Type.GetConstructor(Array.Empty<Type>());
 		}
 
-		string column = GetColumnName(info);
+		ColumnName = GetColumnName(info);
 		_dbColumn = dbColumns.FirstOrDefault(dbColumn =>
 					(parent._schema == null || dbColumn.BaseSchemaName == parent._schema)
 					&& dbColumn.BaseTableName == parent._table
-					&& dbColumn.ColumnName == column);
+					&& dbColumn.ColumnName == ColumnName);
 	}
 
-	public bool IsFaulty => _dbColumn == null && !_isNullable;
+	public bool ColumnNotFound => _dbColumn == null && !_isNullable;
 
-	public string? ParentName => Parent == null ? Type.Name : Parent.PropertyInfo?.Name;
+	public string? ParentName => _parent?.SupportedType switch
+	{
+				SupportedTypes.Array => _parent.GenericType?.Name,
+				SupportedTypes.Class => _parent.Type.Name,
+				_ => null,
+	};
+
+	public string TableName => (_parent?._schema == null ? "" : _parent._schema + '.')
+				+ (_parent?._table == null
+							? ""
+							: _parent._table.Contains('.')
+										? $"[{_table}]"
+										: _parent._table);
+
+	public string? ColumnName { get; }
 
 	public bool IsKey =>
 				_dbColumn != null && (_dbColumn?.IsKey ?? throw new Exception("DbColumn did not have IsKey set"));
 
 	public int Index => _dbColumn?.ColumnOrdinal ?? throw new Exception("DbColumn did not have ColumnOrdinal set");
 
-	private static bool CheckIfNullable(Type type, PropertyHierarchy? parent = null)
+	private static bool CheckIfNullable(PropertyInfo info, PropertyHierarchy? parent = null)
 	{
-		// Array is always nullable, but we never set arrays to be null, but empty array instead
-		if (parent is { _isNullable: true } && parent.SupportedType != SupportedTypes.Array)
+		// Make nullable infectious
+		if (parent is { _isNullable: true })
 		{
 			return true;
 		}
 
-		bool isNullable = Nullable.GetUnderlyingType(type) != null;
+		bool isNullable = Nullable.GetUnderlyingType(info.PropertyType) != null;
 		if (isNullable)
 		{
 			return isNullable;
 		}
 
 		const string nullableAttribute = "System.Runtime.CompilerServices.NullableAttribute";
-		isNullable = type.CustomAttributes.Any(data => data.AttributeType.FullName == nullableAttribute);
+		isNullable = info.CustomAttributes.Any(data => data.AttributeType.FullName == nullableAttribute);
 		return isNullable;
 	}
 
@@ -180,43 +194,67 @@ internal class PropertyHierarchy
 
 	public bool ArrayChildrenValid()
 	{
+		// If all is nullable, we good.
+		if (Children.All(child => child._isNullable))
+		{
+			return true;
+		}
+
+		// If all was set to null, do not add
+		if (Children.All(child => child.ValueSet == ValueSetResult.SetNull))
+		{
+			return false;
+		}
+		
 		// If a property of an array prop is not nullable and was set to null, the element is not valid
-		return !Children.Any(hierarchy => !hierarchy._isNullable && hierarchy.ValueSet == ValueSetResult.SetNull);
+		IEnumerable<string> errors = from child in Children
+					where !child._isNullable && child.ValueSet == ValueSetResult.SetNull
+					select $"Entity '{child.ParentName}' has not nullable public property '{child.PropertyInfo?.Name}'"
+								+ $", but value from column '{child.ColumnName}' from table '{child.TableName}' was null";
+
+		foreach (string err in errors)
+		{
+			throw new Exception(err);
+		}
+
+		return true;
 	}
 
 	public void SetValue(object item, object[] columns)
 	{
-		if (_dbColumn == null)
+		object value = _dbColumn == null ? DBNull.Value : columns[Index];
+		if (value is DBNull)
 		{
-			if (!_isNullable && Parent?._isNullable != true)
+			if (!_isNullable && _parent?.SupportedType != SupportedTypes.Array)
 			{
-				throw new Exception($"'{PropertyInfo!.Name}' is not nullable but query returned null");
+				string err = $"Entity '{ParentName}' has not nullable public property '{PropertyInfo?.Name}', but "
+							+ $"value from column '{ColumnName}' from table '{TableName}' was null";
+
+				throw new Exception(err);
 			}
+			PropertyInfo!.SetValue(item, null);
+			ValueSet = ValueSetResult.SetNull;
 		}
 		else
 		{
-			object value = columns[Index];
-			if (value is DBNull)
-			{
-				PropertyInfo!.SetValue(item, null);
-				ValueSet = ValueSetResult.SetNull;
-			}
-			else
-			{
-				PropertyInfo!.SetValue(item, value);
-				ValueSet = ValueSetResult.Set;
-			}
+			PropertyInfo!.SetValue(item, value);
+			ValueSet = ValueSetResult.Set;
 		}
 	}
 
-	public void SetValue(object item, object value)
+	public void SetValue(object item, object? value)
 	{
-		if (Children.All(hierarchy => hierarchy._dbColumn == null))
+		if (Children.All(hierarchy => hierarchy._dbColumn == null) && !_isNullable)
 		{
-			if (!_isNullable)
-			{
-				throw new Exception($"'{PropertyInfo!.Name}' is not nullable but query returned null");
-			}
+			string err = $"Entity '{ParentName}' has not nullable public property '{PropertyInfo?.Name}', but "
+						+ $"values from  column from table '{TableName}' was all null";
+
+			throw new Exception(err);
+		}
+		if (value == null)
+		{
+			PropertyInfo!.SetValue(item, null);
+			ValueSet = ValueSetResult.SetNull;
 		}
 		else
 		{

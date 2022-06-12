@@ -39,11 +39,11 @@ internal static class SimpleOrmHelper
 			{
 				res.AddRange(prop.Children.CheckHierarchy());
 			}
-			else if (prop.IsFaulty)
+			else if (prop.ColumnNotFound)
 			{
-				string? pName = prop.ParentName;
-				string? name = prop.PropertyInfo?.Name;
-				string err = $"Type '{pName}' has not nullable public property '{name}' not found among query results";
+				string err = $"Entity '{prop.ParentName}' has not nullable public property '{prop.PropertyInfo?.Name}'"
+							+ $" that expected to find column '{prop.ColumnName}' from table '{prop.TableName}'";
+
 				res.Add(err);
 			}
 		}
