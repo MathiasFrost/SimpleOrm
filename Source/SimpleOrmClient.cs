@@ -141,8 +141,10 @@ public class SimpleOrmClient<TDbConnection> where TDbConnection : DbConnection, 
 			}
 			else
 			{
-				item = res.GetByKeys(hierarchy, row);
+				item = (T?)((IEnumerable<object>)res).GetByKeys(hierarchy, row);
 			}
+			
+			// If GetByKeys is null we have a new root element
 			if (item == null)
 			{
 				// We only want first full result here

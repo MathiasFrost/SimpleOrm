@@ -12,7 +12,7 @@ internal class PropertyHierarchy
 
 	private readonly bool _isNullable;
 
-	private readonly PropertyHierarchy? _parent;
+	public readonly PropertyHierarchy? Parent;
 
 	private readonly string? _schema;
 
@@ -47,7 +47,7 @@ internal class PropertyHierarchy
 	/// <summary>Constructor for props</summary>
 	public PropertyHierarchy(PropertyInfo info, PropertyHierarchy parent, IEnumerable<DbColumn> dbColumns)
 	{
-		_parent = parent;
+		Parent = parent;
 		PropertyInfo = info;
 		Type = info.PropertyType;
 		_isNullable = CheckIfNullable(Type);
@@ -74,7 +74,7 @@ internal class PropertyHierarchy
 
 	public bool IsFaulty => _dbColumn == null && !_isNullable;
 
-	public string? ParentName => _parent == null ? Type.Name : _parent.PropertyInfo?.Name;
+	public string? ParentName => Parent == null ? Type.Name : Parent.PropertyInfo?.Name;
 
 	public bool IsKey =>
 				_dbColumn != null && (_dbColumn?.IsKey ?? throw new Exception("DbColumn did not have IsKey set"));
@@ -188,7 +188,7 @@ internal class PropertyHierarchy
 	{
 		if (_dbColumn == null)
 		{
-			if (!_isNullable && _parent?._isNullable != true)
+			if (!_isNullable && Parent?._isNullable != true)
 			{
 				throw new Exception($"'{PropertyInfo!.Name}' is not nullable but query returned null");
 			}

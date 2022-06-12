@@ -117,22 +117,29 @@ internal static class SimpleOrmHelper
 					}
 					break;
 				case SupportedTypes.Array:
-					object array;
-					if (prop.ValueSet == ValueSetResult.NotSet)
+					object? array = prop.GetValue(element);
+					if (array == null)
 					{
 						array = prop.ListConstructor!.Invoke(Array.Empty<object>());
 						prop.SetValue(element, array);
 					}
-					else
+
+					object? item = ((IEnumerable<object>)array).GetByKeys(prop, row);
+
+					// If GetByKeys is null we have a new root element
+					var wasFound = true;
+					if (item == null)
 					{
-						array = prop.GetValue(element)!;
+						item = prop.Constructor!.Invoke(Array.Empty<object>());
+						wasFound = false;
 					}
-					object item = prop.Constructor!.Invoke(Array.Empty<object>());
+
+					// Need to parse before we add in order to check if all results were null
 					item.Parse(row, prop);
-					// We don't want to add array elements that did not have their value set
-					if (prop.ArrayChildrenValid())
+					if (prop.ArrayChildrenValid() && !wasFound)
 					{
 						((IList)array).Add(item);
+						prop.Reset();
 					}
 					break;
 				default: throw new ArgumentOutOfRangeException(nameof(prop), "Unexpected");
@@ -140,24 +147,20 @@ internal static class SimpleOrmHelper
 		}
 	}
 
-	public static T? GetByKeys<T>(this IEnumerable<T> element, PropertyHierarchy hierarchy, object[] columns)
+	public static object? GetByKeys(this IEnumerable<object> element, PropertyHierarchy hierarchy, object[] columns)
 	{
-		List<PropertyHierarchy> keys = hierarchy.Children.Where(p => p.IsKey).ToList();
-		IEnumerable<T> elements = from el in element
-					let keyValues = from key in keys
+		IEnumerable<PropertyHierarchy> keys = hierarchy.Children.Where(p => p.IsKey);
+		IEnumerable<object> elements = from el in element
+					let keyValues =
+								from key in keys
 								let value = key.GetValue(el)
 								where value != null && value.Equals(columns[key.Index])
 								select key
 					let matches = keyValues.Count()
-					where matches == keys.Count
+					where matches == keys.Count()
 					select el;
 
-		foreach (T el in elements)
-		{
-			return el;
-		}
-
-		return default(T?);
+		return elements.FirstOrDefault();
 	}
 
 	public static string Parameterize(this string sql, object @params, Action<string>? log)
